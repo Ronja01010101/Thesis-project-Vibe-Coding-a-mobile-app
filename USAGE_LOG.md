@@ -18,7 +18,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 27 |
+| Total entries | 28 |
 | Avg satisfaction | — |
 | Sessions | 3 |
 | Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review |
@@ -338,6 +338,17 @@
 - **Agreement:** *(current entry — pending)*
 - **Token note — Phase 0:** Not recorded. Sessions 1–2 were completed before token tracking was established. From Phase 2 onwards, run `/cost` at the end of each phase and paste the result.
 - **Plan revised after:** Yes — Step 1 marked Done in status tracker
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 028
+- **Date:** 2026-05-05
+- **Prompt summary:** User ready to start Step 2, asked Claude to run all commands.
+- **My response summary:** Created branch `step-2-map-stops`. Fetched SL Transport API docs to confirm endpoint (`/v1/sites`, returns array with id/gid/name/lat/lon, no key needed). Added OSMDroid, Retrofit, Gson, Coroutines, ViewModel, and AndroidX Preference dependencies. Added INTERNET + ACCESS_NETWORK_STATE permissions to AndroidManifest. Replaced Hello World layout with full-screen OSMDroid MapView. Created: SiteDto (API response model), SlTransportService (Retrofit interface), StopRepository (fetches + maps to Stop model), MapViewModel (loads stops via coroutine, exposes LiveData), updated MainActivity (initialises map centred on Stockholm, observes ViewModel, places a marker per stop). Fixed a deprecation warning by switching from android.preference to androidx.preference. Build verified clean. Committed and pushed branch.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — Step 2 marked Done in status tracker
 - **User feedback:** *(pending — start next prompt with [[...]])*
 - **Satisfaction:** —
 

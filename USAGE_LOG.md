@@ -18,7 +18,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 28 |
+| Total entries | 30 |
 | Avg satisfaction | — |
 | Sessions | 3 |
 | Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review |
@@ -350,6 +350,28 @@
 - **Agreement:** *(current entry — pending)*
 - **Plan revised after:** Yes — Step 2 marked Done in status tracker
 - **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 029
+- **Date:** 2026-05-05
+- **Prompt summary:** User described Step 3 design: bottom sheet slides up when tapping a stop marker or searching by name; user configures commute (line, direction, time window) for that stop; only one active commute per time slot allowed, multiple non-overlapping commutes permitted. Asked if this is possible.
+- **My response summary:** Confirmed all three parts are achievable. Explained: (1) BottomSheetDialogFragment is a standard Material component; (2) search filters the already-loaded stops list in memory, no extra API call; (3) overlap check is simple time-window logic, store list of CommuteConfigs in SharedPreferences as JSON. Noted the sheet will need to fetch lines for the selected stop from SL Transport before user can pick one. Noted CommuteConfig model stays the same — we just store a List of them.
+- **Agreement:** Partial — user paused before building started
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 030
+- **Date:** 2026-05-05
+- **Prompt summary:** User paused for the day, asked to check for uncommitted changes and confirm the project is ready to pick up tomorrow.
+- **My response summary:** Confirmed all code is committed and pushed on main. Noted .claude/ is untracked but not app code. Added .claude/ to .gitignore. Logged final session entries. Project is on main, Steps 1 and 2 done, Step 3 designed but not started.
+- **Agreement:** *(current entry)*
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
 - **Satisfaction:** —
 
 ---

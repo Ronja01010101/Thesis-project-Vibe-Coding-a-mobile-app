@@ -11,8 +11,16 @@
 |---|---|---|
 | SL Transport | Stops, lines, departures, ETA | No |
 | SL Deviations | Disruptions, cancellations | No |
-| GTFS Regional Realtime | Live vehicle GPS positions | Yes (Trafiklab) |
-| Google Maps SDK (Android) | Map display, route geometry | Yes (Google Cloud) |
+| SL Journey Planner | Route planning (Phase 2) | No |
+| GTFS Regional Realtime | Live vehicle GPS positions (protobuf format) | Yes (Trafiklab) |
+
+## Map Library
+
+| Library | Purpose | Key needed |
+|---|---|---|
+| OSMDroid (OpenStreetMap) | Map display, route geometry | No |
+
+> Note: Google Maps SDK was considered and rejected in favour of OSMDroid — free, no API key, native Android library.
 
 ---
 
@@ -22,11 +30,11 @@
 
 | ID | Requirement | Depends on | API needed | Complexity |
 |---|---|---|---|---|
-| P1-FR1 | Display a map where the user can view and select public transport stops | — | Google Maps SDK, SL Transport | Medium |
+| P1-FR1 | Display a map where the user can view and select public transport stops | — | OSMDroid, SL Transport | Medium |
 | P1-FR2 | Allow user to select departure stop, line, direction, and daily commute time window | P1-FR1 | SL Transport | Medium |
-| P1-FR3 | Display selected line and relevant stops on the map | P1-FR1, P1-FR2 | Google Maps SDK, SL Transport | Medium |
+| P1-FR3 | Display selected line and relevant stops on the map | P1-FR1, P1-FR2 | OSMDroid, SL Transport | Medium |
 | P1-FR4 | Fetch live vehicle-position data only for selected line, direction, and time window | P1-FR2 | GTFS Regional Realtime | Hard |
-| P1-FR5 | Display live position of selected vehicle relative to selected stop and route | P1-FR3, P1-FR4 | Google Maps SDK, GTFS | Hard |
+| P1-FR5 | Display live position of selected vehicle relative to selected stop and route | P1-FR3, P1-FR4 | OSMDroid, GTFS | Hard |
 | P1-FR6 | Display a mobile lock-screen activity for the active commute | P1-FR4 | Android App Widget | Hard |
 | P1-FR7 | Lock-screen activity shows vehicle position, status, expected arrival, last update time | P1-FR6 | Android App Widget | Medium |
 | P1-FR8 | Notify/warn user when vehicle is delayed, cancelled, missing, or has uncertain data | P1-FR4, P1-FR10 | SL Deviations | Medium |
@@ -83,6 +91,18 @@
 
 ---
 
+## Technical Constraints
+
+> Known constraints that affect implementation — must be understood before building the relevant steps.
+
+| Constraint | Affects | Detail |
+|---|---|---|
+| GTFS Realtime uses protobuf (binary format) | Step 5 | Not plain JSON — requires a protobuf parsing library (e.g. `google-protobuf` or GTFS-RT Kotlin bindings). Plan for this in Step 5. |
+| App Widget minimum refresh = 30 minutes (standard timer only) | Step 8 | The built-in widget auto-refresh timer is capped at 30 minutes. This does NOT apply when a foreground service pushes updates — use a foreground service to push widget updates every 30–60 seconds during active commute. Foreground service requires a persistent notification while running (Android mandatory). |
+| INTERNET permission required | Step 2 onwards | Must be declared in `AndroidManifest.xml` before any API calls will work. |
+
+---
+
 ## Recommended Build Order (Phase 1)
 
 > Build in this sequence to always have something working at each step.
@@ -92,7 +112,7 @@ Step 1 — Data foundation (DS.Req.1–4, NFR7)
   Define transport object schema and internal data models before any UI
 
 Step 2 — Map + stops (P1-FR1)
-  Google Maps SDK setup, display stops from SL Transport API
+  OSMDroid setup, display stops from SL Transport API
 
 Step 3 — User selection (P1-FR2)
   UI: pick stop, line, direction, time window
@@ -110,7 +130,7 @@ Step 7 — Disruptions (P1-FR8, P1-FR9, DS.Req.6)
   Connect SL Deviations API, show warnings and cancellations
 
 Step 8 — Lock screen widget (P1-FR6, P1-FR7)
-  Android App Widget showing position, status, ETA, last update
+  Android App Widget + foreground service that polls every 30–60s and pushes updates to the widget during active commute window
 
 Step 9 — Lock screen → app link (P1-FR11)
   Tap widget opens the app on the map view
@@ -125,7 +145,7 @@ Step 10 — Polish (NFR1–6)
 
 | ID | Status | Branch | Notes |
 |---|---|---|---|
-| Step 1 | Not started | — | |
+| Step 1 | Done | step-1-data-models | 7 model files, build verified |
 | Step 2 | Not started | — | |
 | Step 3 | Not started | — | |
 | Step 4 | Not started | — | |

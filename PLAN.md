@@ -17,7 +17,8 @@
 | IDE | Android Studio | Free, Windows, includes SDK + emulator |
 | Lock screen feature | Android App Widget | Native widget, updates live, works on lock screen |
 | Live data | Trafiklab API (SL) | Free, open, covers Stockholm public transport |
-| APIs needed | SL Departures v4 + SL Vehicle Positions | Departures for timing, Vehicle Positions for live location |
+| APIs needed | SL Transport + SL Deviations + SL Journey Planner + GTFS Regional Realtime | Departures/delays, deviations, journey planning, live vehicle positions |
+| Map library | OSMDroid (OpenStreetMap) | Free, no API key, native Android library |
 | Version control | Git + GitHub | Backed up, collaborative, good for article |
 | Repo visibility | Public | Good for thesis/article |
 
@@ -29,28 +30,28 @@
 > Goal: everything in place before writing a single line of app code
 
 - [x] Both: install Android Studio (studio.android.com)
-- [x] Both: register at trafiklab.se, apply for:
-  - SL Departures v4 *(pending repo creation)*
-  - SL Vehicle Positions *(pending repo creation)*
+- [x] Both: register at trafiklab.se — APIs used:
+  - SL Transport, SL Deviations, SL Journey Planner (no key needed)
+  - GTFS Regional Realtime (key obtained)
 - [x] Person A: create GitHub repo
   - https://github.com/Ronja01010101/Thesis-project-Vibe-Coding-a-mobile-app
-- [ ] Person A: add Person B as collaborator (Settings → Collaborators)
+- [x] Person A: add Person B as collaborator (Settings → Collaborators)
 - [x] Both: clone the repo locally
   - Local path: C:\Users\datan\RonjAs\Thesis-project-Vibe-Coding-a-mobile-app
 - [x] Create new Android project in Android Studio (Kotlin, Empty Activity)
 - [x] Verify .gitignore is present (Android Studio generates this)
-- [ ] Add API keys to local.properties *(waiting for Trafiklab approval)*
+- [x] Add API keys to local.properties — GTFS Realtime key added; SL APIs need no key
 - [x] Create CLAUDE.md in repo root
 - [x] Move USAGE_LOG.md and PLAN.md into repo
-- [ ] First commit + push: "project setup"
+- [x] First commit + push: "project setup"
 
 ### Phase 1 — Requirements
 > Goal: a clear, prioritized build list before any coding starts
 
-- [ ] Share requirements list
-- [ ] Structure and prioritize requirements together
-- [ ] Create REQUIREMENTS.md in repo
-- [ ] Break requirements into buildable chunks with order
+- [x] Share requirements list
+- [x] Structure and prioritize requirements together
+- [x] Create REQUIREMENTS.md in repo
+- [x] Break requirements into buildable chunks with order
 
 ### Phase 2 — Build
 > Goal: build one requirement at a time, fully logged
@@ -86,3 +87,5 @@
 | 2026-05-04 | Initial plan created | First planning session |
 | 2026-05-04 | Tech stack changed from React + Vite (web) → React Native | Lock screen widget requirement surfaced |
 | 2026-05-04 | Tech stack changed from React Native → Android native (Kotlin) | True lock screen widget requires native; iOS blocked on Windows; Android-only accepted |
+| 2026-05-05 | Map library changed from Google Maps SDK → OSMDroid (OpenStreetMap) | Free, no billing setup, no API key needed, native Android library |
+| 2026-05-05 | API set finalised: SL Transport + SL Deviations + SL Journey Planner + GTFS Regional Realtime | SL Transport covers departures; GTFS Regional Realtime covers live vehicle positions; Deviations and Journey Planner cover Phase 2 reqs |

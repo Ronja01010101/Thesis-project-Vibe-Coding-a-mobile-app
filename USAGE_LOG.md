@@ -18,10 +18,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 10 |
+| Total entries | 27 |
 | Avg satisfaction | — |
-| Sessions | 1 |
-| Phases logged | Pre-project setup, Deciding tech stack |
+| Sessions | 3 |
+| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review |
 | Token checkpoint | run `/cost` to check |
 
 ---
@@ -139,6 +139,205 @@
 - **My response summary:** Backfilled all 10 entries into USAGE_LOG.md with the requested format, grouped into phases (Pre-project Setup, Deciding Tech Stack).
 - **Agreement:** *(current entry — pending)*
 - **Plan revised after:** —
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+## Phase: Phase 0 Completion + Phase 1 Requirements
+*Session 2 — 2026-05-05*
+
+---
+
+### Entry 011
+- **Date:** 2026-05-05
+- **Prompt summary:** User returned the next day asking for next steps in the plan.
+- **My response summary:** Read PLAN.md, identified 3 remaining Phase 0 tasks: add collaborator on GitHub, first commit + push, and API keys pending Trafiklab. Asked which were already done.
+- **Agreement:** Yes — user confirmed git was done, collaborator not yet
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 012
+- **Date:** 2026-05-05
+- **Prompt summary:** User asked if they need to log in to GitHub before running git push commands.
+- **My response summary:** Explained GitHub authentication on Windows — recommended `gh auth login` (browser-based OAuth) as easiest path, or Personal Access Token as fallback. Told user to check `gh --version` first.
+- **Agreement:** Yes — user logged in successfully without a token
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 013
+- **Date:** 2026-05-05
+- **Prompt summary:** User asked whether to run git commands from Android Studio, and noted they can't see PLAN.md and other files there.
+- **My response summary:** Explained that Android Studio defaults to "Android" view which hides non-project files — switch to "Project" view to see all files. Also pointed out the built-in Terminal tab at the bottom of Android Studio to run git commands without leaving the IDE.
+- **Agreement:** Yes — user used the Android Studio terminal
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 014
+- **Date:** 2026-05-05
+- **Prompt summary:** User shared list of untracked files before committing: CLAUDE.md, PLAN.md, USAGE_LOG.md, and gradle/gradle-daemon-jvm.properties.
+- **My response summary:** Confirmed all four files are safe to commit. The gradle file stores JVM build settings and is not sensitive. Gave the full git add/commit/push command.
+- **Agreement:** Yes — commands ran successfully
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 015
+- **Date:** 2026-05-05
+- **Prompt summary:** User confirmed files pushed to GitHub and asked for next step.
+- **My response summary:** Updated PLAN.md to check off commit/push. Also corrected the API names in the plan (old "SL Departures v4 + SL Vehicle Positions" replaced with correct current APIs: SL Transport, GTFS Regional Realtime, Google Maps SDK). Asked about collaborator status and Trafiklab approval.
+- **Agreement:** Yes
+- **Plan revised after:** Yes — API names corrected in tech stack table
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 016
+- **Date:** 2026-05-05
+- **Prompt summary:** User confirmed collaborator has been added to GitHub repo. Phase 0 complete.
+- **My response summary:** Updated PLAN.md to check off collaborator step. Confirmed Phase 0 is fully complete (except API keys waiting on Trafiklab). Invited user to share requirements list to begin Phase 1.
+- **Agreement:** Yes
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 017
+- **Date:** 2026-05-05
+- **Prompt summary:** User shared full requirements list: 11 Phase 1 functional requirements, 7 Phase 2 journey-planning requirements, 10 Digital Shadow data requirements, and 7 non-functional requirements.
+- **My response summary:** Analysed all requirements, identified API dependencies per requirement, estimated complexity, and produced a 10-step recommended build order prioritising working software at each step. Created REQUIREMENTS.md in the repo. Flagged that DS requirements are architectural and apply throughout, not built one at a time. Noted Steps 5 (GTFS live data) and 8 (lock screen widget) as the hardest.
+- **Agreement:** Yes — user committed REQUIREMENTS.md to GitHub
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 018
+- **Date:** 2026-05-05
+- **Prompt summary:** User confirmed REQUIREMENTS.md pushed and asked for next step.
+- **My response summary:** Updated PLAN.md to mark Phase 1 complete. Announced start of Phase 2 Build, Step 1: Data Foundation (DS.Req.1–4, NFR7). Instructed user to create a feature branch `step-1-data-models` and asked for the package name from MainActivity.kt to start writing Kotlin data models.
+- **Agreement:** Partial — user paused before starting to request a usage log update
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 019
+- **Date:** 2026-05-05
+- **Prompt summary:** User asked to pause Phase 2 and update the usage log before switching to CLI in Android Studio.
+- **My response summary:** Read current USAGE_LOG.md and appended all 9 new entries from Session 2 (entries 011–019), grouped under "Phase 0 Completion + Phase 1 Requirements". Updated summary stats to 19 total entries, 2 sessions.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** —
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+## Phase: Phase 2 Build — API & Map Setup
+*Session 3 — 2026-05-05*
+
+---
+
+### Entry 020
+- **Date:** 2026-05-05
+- **Prompt summary:** User asked which APIs to use, sharing links to SL APIs (Transport, Deviations, Journey Planner), GTFS Regional Realtime, GTFS Regional Static, and Trafiklab Realtime APIs.
+- **My response summary:** Explained that SL Transport covers departures but not vehicle positions — GTFS Regional Realtime is required for live bus location on the map. Recommended 4-API set (SL Transport, SL Deviations, SL Journey Planner, GTFS Regional Realtime). Advised dropping GTFS Regional Static (too heavy) and Trafiklab Realtime APIs (redundant). Recommended Google Maps SDK for the map with OSMDroid as a free alternative.
+- **Agreement:** Partial — user asked about Leaflet.js before deciding
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 021
+- **Date:** 2026-05-05
+- **Prompt summary:** User asked if Leaflet.js would work for the map.
+- **My response summary:** Explained that Leaflet is a JavaScript/browser library — using it in a native Android app would require embedding a WebView and wiring Kotlin↔JavaScript communication, adding unnecessary complexity. Recommended OSMDroid as the Android-native equivalent (same OpenStreetMap tiles, free, no key, proper Kotlin library).
+- **Agreement:** Yes — user chose OSMDroid, rejected Google Maps
+- **Plan revised after:** Yes — map library locked to OSMDroid; full API set finalised in PLAN.md
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 022
+- **Date:** 2026-05-05
+- **Prompt summary:** User asked whether SL APIs require keys, sharing Trafiklab documentation links.
+- **My response summary:** Fetched SL Transport and SL Deviations docs — both confirmed no API key required. SL Journey Planner page returned 403 but follows the same pattern. Confirmed only GTFS Regional Realtime needs a key (already obtained). Cleaned up build.gradle.kts and local.properties to remove the unnecessary SL key slots.
+- **Agreement:** Yes
+- **Plan revised after:** Yes — local.properties and build.gradle.kts updated; SL key fields removed
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 023
+- **Date:** 2026-05-05
+- **Prompt summary:** User asked about using Leaflet.js for the map.
+- **My response summary:** Explained that Leaflet is a JavaScript/browser library and cannot be used natively in Android without embedding a WebView, which adds unnecessary complexity. Recommended OSMDroid as the Android-native equivalent — same OpenStreetMap tiles, free, no key, proper Kotlin library.
+- **Agreement:** Yes — OSMDroid chosen
+- **Plan revised after:** Yes — map library locked to OSMDroid in PLAN.md and REQUIREMENTS.md
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 024
+- **Date:** 2026-05-05
+- **Prompt summary:** User asked how API key security works at deployment time — can keys be stored in GitHub Secrets?
+- **My response summary:** Explained that keys get baked into the APK at build time. GitHub Secrets only work in GitHub Actions (CI/CD cloud builds) and don't help with local Android Studio builds. For a thesis project with Trafiklab free-tier keys, the local.properties approach is correct and sufficient. Collaborator must add keys manually to their own local.properties.
+- **Agreement:** Yes — user accepted local.properties approach
+- **Plan revised after:** No
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 025
+- **Date:** 2026-05-05
+- **Prompt summary:** User asked for a critical review of all plans before building starts, and to document the conversation.
+- **My response summary:** Read PLAN.md and REQUIREMENTS.md. Found and fixed 5 issues: (1) REQUIREMENTS.md still referenced Google Maps SDK throughout — replaced with OSMDroid everywhere. (2) PLAN.md Phase 0 had outdated API names and unchecked API key item — corrected and checked off. (3) Flagged that GTFS Realtime uses protobuf binary format, not JSON — requires extra parsing library at Step 5. (4) Flagged that Android App Widgets have a 30-minute minimum refresh floor — FR6/FR7 need WorkManager instead of standard widget updates. (5) Flagged that INTERNET permission must be declared in AndroidManifest.xml before any API calls work. Added a Technical Constraints section to REQUIREMENTS.md documenting items 3–5.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — REQUIREMENTS.md and PLAN.md updated
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 026
+- **Date:** 2026-05-05
+- **Prompt summary:** User expressed concern about whether a live-updating lock screen widget is actually achievable given the 30-minute Android constraint I flagged in Entry 025.
+- **My response summary:** Clarified that the 30-minute limit only applies to the widget's built-in auto-refresh timer — it does NOT apply when a foreground service pushes updates directly to the widget. Explained the foreground service approach: user activates commute → service starts → polls GTFS Realtime every 30–60 seconds → pushes update to widget on each poll → stops when commute window ends. One mandatory tradeoff: Android requires a persistent notification while the service runs. This is the standard approach used by production transit apps (Citymapper, Google Maps navigation). Updated REQUIREMENTS.md Technical Constraints and Step 8 build order to reflect foreground service approach.
+- **Agreement:** Yes
+- **Plan revised after:** Yes — Step 8 updated to specify foreground service + widget; constraint note corrected
+- **Requirement change noted:** FR6/FR7 (lock screen widget) implementation approach changed from standard widget auto-update → foreground service pushing updates. **Why:** Standard widget timer is capped at 30 minutes by Android OS. Foreground service bypasses this cap and can push updates every 30–60 seconds. Live updating is critical to the thesis artifact and was non-negotiable — so the implementation approach changed, not the requirement itself.
+- **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+### Entry 027
+- **Date:** 2026-05-05
+- **Prompt summary:** User ready for Step 1, asked to run all commands, and asked to note token usage for Phase 0.
+- **My response summary:** Noted that `/cost` only covers the current session — Phase 0 token cost was not captured at the time and cannot be recovered. Created feature branch `step-1-data-models`. Wrote 7 Kotlin model files in a new `model` package: Stop, Line, CommuteConfig, VehiclePosition (+ DataQuality enum), Departure (+ DepartureStatus enum), Disruption (+ DisruptionSeverity enum), TransportState. Verified clean build with `./gradlew compileDebugKotlin`. Committed and pushed branch to GitHub. Updated REQUIREMENTS.md status tracker.
+- **Agreement:** *(current entry — pending)*
+- **Token note — Phase 0:** Not recorded. Sessions 1–2 were completed before token tracking was established. From Phase 2 onwards, run `/cost` at the end of each phase and paste the result.
+- **Plan revised after:** Yes — Step 1 marked Done in status tracker
 - **User feedback:** *(pending — start next prompt with [[...]])*
 - **Satisfaction:** —
 

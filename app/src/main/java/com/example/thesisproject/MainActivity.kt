@@ -7,6 +7,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.EditText
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
@@ -43,7 +44,9 @@ class MainActivity : AppCompatActivity() {
     private val visibleMarkers: MutableList<Marker> = mutableListOf()
     private val rebuildHandler = Handler(Looper.getMainLooper())
     private val rebuildRunnable = Runnable { rebuildVisibleMarkers() }
-    private var mapReady = false
+
+    private var centerLat = STOCKHOLM_LAT
+    private var centerLon = STOCKHOLM_LON
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,19 +64,14 @@ class MainActivity : AppCompatActivity() {
         map.setTileSource(TileSourceFactory.MAPNIK)
         map.setMultiTouchControls(true)
         map.controller.setZoom(13.0)
-        map.controller.setCenter(GeoPoint(59.3293, 18.0686)) // Stockholm city centre
+        map.controller.setCenter(GeoPoint(STOCKHOLM_LAT, STOCKHOLM_LON))
 
         map.addMapListener(object : MapListener {
-            override fun onScroll(event: ScrollEvent?): Boolean { scheduleRebuild(); return false }
-            override fun onZoom(event: ZoomEvent?): Boolean { scheduleRebuild(); return false }
-        })
-
-        // boundingBox is only valid once the MapView has been measured. On a slow
-        // emulator the network stops can arrive before that happens, so wait here.
-        map.addOnFirstLayoutListener(object : MapView.OnFirstLayoutListener {
-            override fun onFirstLayout(v: View, left: Int, top: Int, right: Int, bottom: Int) {
-                mapReady = true
-                scheduleRebuild()
+            override fun onScroll(event: ScrollEvent?): Boolean {
+                updateCenterFromMap(); scheduleRebuild(); return false
+            }
+            override fun onZoom(event: ZoomEvent?): Boolean {
+                updateCenterFromMap(); scheduleRebuild(); return false
             }
         })
 
@@ -81,6 +79,7 @@ class MainActivity : AppCompatActivity() {
 
         viewModel.stops.observe(this) { stops ->
             allStops = stops
+            Toast.makeText(this, "Loaded ${stops.size} stops", Toast.LENGTH_SHORT).show()
             scheduleRebuild()
         }
         viewModel.loadStops()
@@ -118,33 +117,52 @@ class MainActivity : AppCompatActivity() {
         resultsCard.visibility = if (matches.isEmpty()) View.GONE else View.VISIBLE
     }
 
+    private fun updateCenterFromMap() {
+        val c = map.mapCenter
+        val lat = c.latitude
+        val lon = c.longitude
+        // Guard against weird/uninitialised values; keep last good center otherwise.
+        if (lat in -90.0..90.0 && lon in -180.0..180.0 && (lat != 0.0 || lon != 0.0)) {
+            centerLat = lat
+            centerLon = lon
+        }
+    }
+
     private fun scheduleRebuild() {
         rebuildHandler.removeCallbacks(rebuildRunnable)
         rebuildHandler.postDelayed(rebuildRunnable, REBUILD_DEBOUNCE_MS)
     }
 
+    /**
+     * Render the [MAX_MARKERS] stops closest to the current map center. We use
+     * "nearest to center" rather than "inside boundingBox" because boundingBox
+     * is unreliable until the MapView has been measured, and on slow emulators
+     * the stops can arrive first. Distance to center is always well-defined.
+     */
     private fun rebuildVisibleMarkers() {
-        if (!mapReady || allStops.isEmpty() || map.width == 0 || map.height == 0) return
-        val bbox = map.boundingBox
+        if (allStops.isEmpty()) return
+
+        val nearest = allStops.sortedBy { stop ->
+            val dLat = stop.lat - centerLat
+            val dLon = stop.lon - centerLon
+            dLat * dLat + dLon * dLon
+        }.take(MAX_MARKERS)
 
         visibleMarkers.forEach { map.overlays.remove(it) }
         visibleMarkers.clear()
 
-        allStops.asSequence()
-            .filter { bbox.contains(GeoPoint(it.lat, it.lon)) }
-            .take(MAX_MARKERS)
-            .forEach { stop ->
-                val marker = Marker(map)
-                marker.position = GeoPoint(stop.lat, stop.lon)
-                marker.title = stop.name
-                marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                marker.setOnMarkerClickListener { _, _ ->
-                    openCommuteConfig(stop)
-                    true
-                }
-                visibleMarkers.add(marker)
-                map.overlays.add(marker)
+        nearest.forEach { stop ->
+            val marker = Marker(map)
+            marker.position = GeoPoint(stop.lat, stop.lon)
+            marker.title = stop.name
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            marker.setOnMarkerClickListener { _, _ ->
+                openCommuteConfig(stop)
+                true
             }
+            visibleMarkers.add(marker)
+            map.overlays.add(marker)
+        }
         map.invalidate()
     }
 
@@ -171,6 +189,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        private const val STOCKHOLM_LAT = 59.3293
+        private const val STOCKHOLM_LON = 18.0686
         private const val MAX_MARKERS = 400
         private const val REBUILD_DEBOUNCE_MS = 200L
     }

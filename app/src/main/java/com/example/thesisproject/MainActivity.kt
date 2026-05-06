@@ -10,6 +10,7 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -83,8 +84,13 @@ class MainActivity : AppCompatActivity() {
             scheduleRebuild()
         }
         viewModel.error.observe(this) { msg ->
-            if (!msg.isNullOrBlank()) {
-                Toast.makeText(this, "Stops API error: $msg", Toast.LENGTH_LONG).show()
+            if (!msg.isNullOrBlank() && !isFinishing) {
+                AlertDialog.Builder(this)
+                    .setTitle("Stops API error")
+                    .setMessage(msg)
+                    .setPositiveButton("OK", null)
+                    .setCancelable(false)
+                    .show()
             }
         }
         viewModel.loadStops()

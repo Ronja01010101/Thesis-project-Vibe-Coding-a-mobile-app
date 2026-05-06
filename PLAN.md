@@ -37,7 +37,6 @@
   - https://github.com/Ronja01010101/Thesis-project-Vibe-Coding-a-mobile-app
 - [x] Person A: add Person B as collaborator (Settings → Collaborators)
 - [x] Both: clone the repo locally
-  - Local path: C:\Users\datan\RonjAs\Thesis-project-Vibe-Coding-a-mobile-app
 - [x] Create new Android project in Android Studio (Kotlin, Empty Activity)
 - [x] Verify .gitignore is present (Android Studio generates this)
 - [x] Add API keys to local.properties — GTFS Realtime key added; SL APIs need no key

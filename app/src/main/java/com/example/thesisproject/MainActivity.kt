@@ -1,6 +1,8 @@
 package com.example.thesisproject
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
@@ -19,6 +21,9 @@ import com.example.thesisproject.ui.StopAdapter
 import com.example.thesisproject.ui.StopConfigBottomSheet
 import com.google.android.material.card.MaterialCardView
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
@@ -35,6 +40,9 @@ class MainActivity : AppCompatActivity() {
     private lateinit var stopAdapter: StopAdapter
 
     private var allStops: List<Stop> = emptyList()
+    private val visibleMarkers: MutableList<Marker> = mutableListOf()
+    private val rebuildHandler = Handler(Looper.getMainLooper())
+    private val rebuildRunnable = Runnable { rebuildVisibleMarkers() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -54,11 +62,16 @@ class MainActivity : AppCompatActivity() {
         map.controller.setZoom(13.0)
         map.controller.setCenter(GeoPoint(59.3293, 18.0686)) // Stockholm city centre
 
+        map.addMapListener(object : MapListener {
+            override fun onScroll(event: ScrollEvent?): Boolean { scheduleRebuild(); return false }
+            override fun onZoom(event: ZoomEvent?): Boolean { scheduleRebuild(); return false }
+        })
+
         setupSearch()
 
         viewModel.stops.observe(this) { stops ->
             allStops = stops
-            showStopsOnMap(stops)
+            scheduleRebuild()
         }
         viewModel.loadStops()
     }
@@ -95,18 +108,33 @@ class MainActivity : AppCompatActivity() {
         resultsCard.visibility = if (matches.isEmpty()) View.GONE else View.VISIBLE
     }
 
-    private fun showStopsOnMap(stops: List<Stop>) {
-        stops.forEach { stop ->
-            val marker = Marker(map)
-            marker.position = GeoPoint(stop.lat, stop.lon)
-            marker.title = stop.name
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-            marker.setOnMarkerClickListener { _, _ ->
-                openCommuteConfig(stop)
-                true
+    private fun scheduleRebuild() {
+        rebuildHandler.removeCallbacks(rebuildRunnable)
+        rebuildHandler.postDelayed(rebuildRunnable, REBUILD_DEBOUNCE_MS)
+    }
+
+    private fun rebuildVisibleMarkers() {
+        if (allStops.isEmpty()) return
+        val bbox = map.boundingBox
+
+        visibleMarkers.forEach { map.overlays.remove(it) }
+        visibleMarkers.clear()
+
+        allStops.asSequence()
+            .filter { bbox.contains(GeoPoint(it.lat, it.lon)) }
+            .take(MAX_MARKERS)
+            .forEach { stop ->
+                val marker = Marker(map)
+                marker.position = GeoPoint(stop.lat, stop.lon)
+                marker.title = stop.name
+                marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                marker.setOnMarkerClickListener { _, _ ->
+                    openCommuteConfig(stop)
+                    true
+                }
+                visibleMarkers.add(marker)
+                map.overlays.add(marker)
             }
-            map.overlays.add(marker)
-        }
         map.invalidate()
     }
 
@@ -125,5 +153,15 @@ class MainActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         map.onPause()
+    }
+
+    override fun onDestroy() {
+        rebuildHandler.removeCallbacks(rebuildRunnable)
+        super.onDestroy()
+    }
+
+    companion object {
+        private const val MAX_MARKERS = 400
+        private const val REBUILD_DEBOUNCE_MS = 200L
     }
 }

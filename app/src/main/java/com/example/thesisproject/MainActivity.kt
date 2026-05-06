@@ -7,7 +7,6 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.EditText
-import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
@@ -80,7 +79,6 @@ class MainActivity : AppCompatActivity() {
 
         viewModel.stops.observe(this) { stops ->
             allStops = stops
-            Toast.makeText(this, "Loaded ${stops.size} stops", Toast.LENGTH_SHORT).show()
             scheduleRebuild()
         }
         viewModel.error.observe(this) { msg ->

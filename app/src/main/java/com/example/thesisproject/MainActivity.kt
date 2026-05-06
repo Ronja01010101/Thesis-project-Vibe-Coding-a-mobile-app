@@ -82,6 +82,11 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "Loaded ${stops.size} stops", Toast.LENGTH_SHORT).show()
             scheduleRebuild()
         }
+        viewModel.error.observe(this) { msg ->
+            if (!msg.isNullOrBlank()) {
+                Toast.makeText(this, "Stops API error: $msg", Toast.LENGTH_LONG).show()
+            }
+        }
         viewModel.loadStops()
     }
 

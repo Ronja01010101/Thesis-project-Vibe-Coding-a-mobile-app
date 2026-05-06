@@ -15,18 +15,15 @@ class StopRepository {
         .build()
         .create(SlTransportService::class.java)
 
+    /** Fetches all SL stops. Throws on any network/parse error so callers can surface it. */
     suspend fun getStops(): List<Stop> {
-        return try {
-            api.getSites().map { site ->
-                Stop(
-                    id = site.id.toString(),
-                    name = site.name,
-                    lat = site.lat,
-                    lon = site.lon
-                )
-            }
-        } catch (e: Exception) {
-            emptyList()
+        return api.getSites().map { site ->
+            Stop(
+                id = site.id.toString(),
+                name = site.name,
+                lat = site.lat,
+                lon = site.lon
+            )
         }
     }
 

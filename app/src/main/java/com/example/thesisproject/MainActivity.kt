@@ -43,6 +43,7 @@ class MainActivity : AppCompatActivity() {
     private val visibleMarkers: MutableList<Marker> = mutableListOf()
     private val rebuildHandler = Handler(Looper.getMainLooper())
     private val rebuildRunnable = Runnable { rebuildVisibleMarkers() }
+    private var mapReady = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +66,15 @@ class MainActivity : AppCompatActivity() {
         map.addMapListener(object : MapListener {
             override fun onScroll(event: ScrollEvent?): Boolean { scheduleRebuild(); return false }
             override fun onZoom(event: ZoomEvent?): Boolean { scheduleRebuild(); return false }
+        })
+
+        // boundingBox is only valid once the MapView has been measured. On a slow
+        // emulator the network stops can arrive before that happens, so wait here.
+        map.addOnFirstLayoutListener(object : MapView.OnFirstLayoutListener {
+            override fun onFirstLayout(v: View, left: Int, top: Int, right: Int, bottom: Int) {
+                mapReady = true
+                scheduleRebuild()
+            }
         })
 
         setupSearch()
@@ -114,7 +124,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun rebuildVisibleMarkers() {
-        if (allStops.isEmpty()) return
+        if (!mapReady || allStops.isEmpty() || map.width == 0 || map.height == 0) return
         val bbox = map.boundingBox
 
         visibleMarkers.forEach { map.overlays.remove(it) }

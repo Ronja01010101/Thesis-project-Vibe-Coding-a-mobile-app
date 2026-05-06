@@ -88,6 +88,7 @@
 | NFR5 | Store only user settings needed for the commute-monitoring function |
 | NFR6 | Log API response status, timestamp, validation result, and update errors during development |
 | NFR7 | Modular structure — live-data, map, user settings, disruption, and notification functions developed and tested separately |
+| NFR8 | Limit rendered map markers to the current viewport (with a hard cap on count) so the app stays responsive on low-spec hardware and emulators |
 
 ---
 
@@ -116,6 +117,11 @@ Step 2 — Map + stops (P1-FR1)
 
 Step 3 — User selection (P1-FR2)
   UI: pick stop, line, direction, time window
+
+Step 3.5 — Limit map data (NFR8) — emergency fix
+  Viewport-bound marker rendering with a hard cap; rebuilt on map idle.
+  Inserted after Step 3 because rendering all ~14k SL stops at once
+  killed the emulator on both collaborators' machines.
 
 Step 4 — Map visualization (P1-FR3)
   Draw selected line and stops on map
@@ -148,6 +154,7 @@ Step 10 — Polish (NFR1–6)
 | Step 1 | Done | step-1-data-models | 7 model files, build verified |
 | Step 2 | Done | step-2-map-stops | OSMDroid map + SL stop markers, build verified |
 | Step 3 | Done | step-3-commute-config | Bottom sheet for commute config, stop search, overlap check, build verified (runtime test pending — collaborator) |
+| Step 3.5 | Done | step-3-5-limit-map-data | Emergency perf fix (NFR8). Render the 400 stops nearest the map center; rebuilt on map idle. Runtime-tested in emulator (2026-05-06). Two follow-ups in BUGS.md: BUG-002 (zoom-out cluster looks weird), BUG-003 (default marker icon too large). |
 | Step 4 | Not started | — | |
 | Step 5 | Not started | — | |
 | Step 6 | Not started | — | |

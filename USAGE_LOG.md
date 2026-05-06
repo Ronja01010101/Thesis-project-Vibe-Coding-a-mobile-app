@@ -18,7 +18,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 34 |
+| Total entries | 39 |
 | Avg satisfaction | — |
 | Sessions | 4 |
 | Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config |
@@ -421,6 +421,61 @@
 - **My response summary:** Updated REQUIREMENTS.md status from "Done (push pending)" → "Done" with note "runtime test pending — collaborator". Updated PLAN.md change-log entry to reflect merge. Switched to `main`, pulled (already up-to-date), fast-forward merged `step-3-commute-config`, pushed `main` to origin. Then committed the three planning files (PLAN.md, REQUIREMENTS.md, USAGE_LOG.md) as a separate "update planning files" commit on `main` matching the Step 2 pattern, and pushed.
 - **Agreement:** *(current entry — pending)*
 - **Plan revised after:** Yes — Step 3 status finalised; main now contains all Step 3 work.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 035
+- **Date:** 2026-05-06
+- **Prompt summary:** User logged a testing-environment finding from this session: when trying to launch the emulator to test Step 3, the user's machine spiked to 100% CPU and RAM and the emulator would not start. The branch was synced to the collaborator's computer; the collaborator's machine also failed to start the emulator. Cause is unclear, but the user's working hypothesis is that the app is loading too much data into the map (the current `getStops()` pulls every SL site in Stockholm at once — on the order of 14k markers). User said the next planned work item will be to limit how much data the map loads, to test whether that's the bottleneck.
+- **My response summary:** Logged the incident as Entry 035 per request. Flagged that this likely warrants a new build step inserted before the current Step 4 (line visualisation) — e.g. clustering, viewport-bound loading, or capping the marker count — and offered to update REQUIREMENTS.md / PLAN.md to add the new step when the user confirms how they want it structured.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Pending — a new "limit map data" step to be inserted into the build order.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 036
+- **Date:** 2026-05-06
+- **Prompt summary:** User asked to add the new "limit map data" step to PLAN.md and REQUIREMENTS.md, log it as an emergency fix, add it as a performance requirement, and implement the fix immediately.
+- **My response summary:** (1) Added NFR8 to REQUIREMENTS.md non-functional table — "Limit rendered map markers to current viewport (with hard cap) for low-spec hardware/emulator responsiveness." (2) Inserted "Step 3.5 — Limit map data" into REQUIREMENTS.md status tracker and Recommended Build Order, marked as emergency fix. (3) Added a PLAN.md change-log entry tagging it as an emergency fix and documenting the cause hypothesis (~14k SL stops rendered as overlays simultaneously). (4) Created branch `step-3-5-limit-map-data` off main. (5) Implemented in `MainActivity`: added an OSMDroid `MapListener`, a debounced `Handler` (200 ms), and a `rebuildVisibleMarkers()` method that filters `allStops` to those inside `map.boundingBox` and caps the count at `MAX_MARKERS = 400`. Old markers are tracked in a `visibleMarkers` list and removed before each rebuild. The viewmodel observer now triggers `scheduleRebuild()` instead of plotting all stops. Added `onDestroy` cleanup for the handler. (6) Build verified clean with `assembleDebug`. (7) Committed (`ee65401`) and pushed branch `step-3-5-limit-map-data`. Branch is ready for the user / collaborator to test the emulator with the reduced marker count.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — Step 3.5 added to build order; NFR8 added to non-functional requirements; status tracker updated.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 037
+- **Date:** 2026-05-06
+- **Prompt summary:** User got the emulator to launch the app, the map loaded, but no stop markers appeared. Asked Claude to diagnose and fix before ending the day.
+- **My response summary:** Diagnosed a race condition introduced by Step 3.5: `map.boundingBox` returns a degenerate (zero-area) box until OSMDroid's `MapView` has been measured by Android's layout pass. On a slow emulator, the network response with stops can arrive before the first layout, so `bbox.contains(...)` returns false for every stop and zero markers render. Fix: added a `mapReady` flag, registered `MapView.OnFirstLayoutListener` to set it true and trigger an initial rebuild after layout. Added defensive `map.width == 0 || map.height == 0` guard, and removed a deprecated `latitudeSpan`/`longitudeSpan` check that produced a compiler warning. Rebuilt clean with no warnings, committed (`46b53b8`) and pushed to `step-3-5-limit-map-data`.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** No (same step, same branch — bug fix on top of `ee65401`)
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 038
+- **Date:** 2026-05-06
+- **Prompt summary:** Previous fix didn't help — markers still not appearing on the emulator. User also reported a non-blocker bug: search doesn't handle Swedish characters (å, ä, ö). Asked to start a bug list for non-blocker bugs going forward; Claude should add to it whenever the user reports a non-blocker, and only fix immediately when told it's a blocker.
+- **My response summary:** (1) Created `BUGS.md` at the repo root with a simple ID/Date/Severity/Component/Description table; logged BUG-001 for the å/ä/ö search bug. Established as the persistent place for non-blocker bugs going forward. (2) Replaced the bbox-based viewport filter with a more robust strategy: render the `MAX_MARKERS` (400) stops with the smallest squared lat/lon distance from the current map center. This avoids any dependence on `MapView.boundingBox` / projection initialisation. The center is initialised to Stockholm and updated from `map.mapCenter` whenever the user scrolls or zooms (with a sanity guard against weird/uninitialised values). Removed the `mapReady` flag and `OnFirstLayoutListener`. (3) Added a one-shot `Toast` showing `"Loaded N stops"` when the API responds, so we can tell loading-failure from rendering-failure on the next test run. Build clean, no warnings. (4) Pushed two commits: `916f6c8` (BUGS.md + BUG-001) and `d7a72bd` (the marker fix + toast).
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** No
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 039
+- **Date:** 2026-05-06
+- **Prompt summary:** User got the emulator working after enabling their VPN — the prior `UnknownHostException` was a host-side network/DNS issue, not an app issue. They confirmed stops now render around Stockholm and refresh on pan/zoom. Asked Claude to (a) note two follow-up bugs (BUG-002 zoom-out cluster looks weird; BUG-003 default marker icon too large), (b) check that nothing in the code is hardcoded to their specific connection, and (c) merge `step-3-5-limit-map-data` to main once that's done.
+- **My response summary:** Confirmed nothing connection-specific is hardcoded — only the public SL Transport API URL `https://transport.integration.sl.se/v1/`, which is correct and necessary. Logged BUG-002 (medium severity, cluster-at-center when zoomed out — possible fixes: zoom-threshold gate or proper clustering with `RadiusMarkerClusterer`) and BUG-003 (low severity, marker icon size). Removed the diagnostic "Loaded N stops" Toast (kept the persistent error AlertDialog as a real error UI). Built clean, committed (`0774244`) and pushed to `step-3-5-limit-map-data`. Switched to main, fast-forward merged the branch (commits ee65401 → 0774244), pushed main. Updated REQUIREMENTS.md status tracker — Step 3.5 → Done — and added a PLAN.md change-log entry. About to commit the planning files on main with the same `update planning files: …` pattern used after Steps 2 and 3.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — Step 3.5 marked Done, follow-up bugs filed, main now contains the perf fix.
 - **User feedback:** *(pending — start next prompt with [[...]])*
 - **Satisfaction:** —
 

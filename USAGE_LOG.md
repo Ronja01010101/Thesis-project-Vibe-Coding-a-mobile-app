@@ -18,7 +18,7 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 39 |
+| Total entries | 40 |
 | Avg satisfaction | — |
 | Sessions | 4 |
 | Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config |
@@ -476,6 +476,17 @@
 - **My response summary:** Confirmed nothing connection-specific is hardcoded — only the public SL Transport API URL `https://transport.integration.sl.se/v1/`, which is correct and necessary. Logged BUG-002 (medium severity, cluster-at-center when zoomed out — possible fixes: zoom-threshold gate or proper clustering with `RadiusMarkerClusterer`) and BUG-003 (low severity, marker icon size). Removed the diagnostic "Loaded N stops" Toast (kept the persistent error AlertDialog as a real error UI). Built clean, committed (`0774244`) and pushed to `step-3-5-limit-map-data`. Switched to main, fast-forward merged the branch (commits ee65401 → 0774244), pushed main. Updated REQUIREMENTS.md status tracker — Step 3.5 → Done — and added a PLAN.md change-log entry. About to commit the planning files on main with the same `update planning files: …` pattern used after Steps 2 and 3.
 - **Agreement:** *(current entry — pending)*
 - **Plan revised after:** Yes — Step 3.5 marked Done, follow-up bugs filed, main now contains the perf fix.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 040
+- **Date:** 2026-05-06
+- **Prompt summary:** User asked to wrap up the day and verify that all logs and plans are updated.
+- **My response summary:** Confirmed: working tree on `main` is clean, no uncommitted changes; `main` is in sync with origin at `885aee0`. Today's commits on main: `ee65401`, `46b53b8`, `916f6c8`, `d7a72bd`, `dfb7500`, `611fc20`, `0774244`, `885aee0` (Step 3.5 implementation, debugging iterations, cleanup, planning files). REQUIREMENTS.md status tracker has Step 3.5 marked Done with BUG-002 / BUG-003 noted. PLAN.md change-log has the Step 3.5 emergency-fix entry and the resolution entry. BUGS.md contains BUG-001 (Nordic chars in search), BUG-002 (cluster-at-center on zoom out), BUG-003 (oversized marker icon). USAGE_LOG.md is current through Entry 040 with Session 4 closing here.
+- **Agreement:** *(end of session — Session 4 closes here)*
+- **Plan revised after:** No — wrap-up only.
 - **User feedback:** *(pending — start next prompt with [[...]])*
 - **Satisfaction:** —
 

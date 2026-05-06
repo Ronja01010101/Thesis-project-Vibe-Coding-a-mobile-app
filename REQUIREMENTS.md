@@ -147,7 +147,7 @@ Step 10 — Polish (NFR1–6)
 |---|---|---|---|
 | Step 1 | Done | step-1-data-models | 7 model files, build verified |
 | Step 2 | Done | step-2-map-stops | OSMDroid map + SL stop markers, build verified |
-| Step 3 | Not started | — | |
+| Step 3 | Done | step-3-commute-config | Bottom sheet for commute config, stop search, overlap check, build verified (runtime test pending — collaborator) |
 | Step 4 | Not started | — | |
 | Step 5 | Not started | — | |
 | Step 6 | Not started | — | |

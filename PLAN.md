@@ -89,3 +89,4 @@
 | 2026-05-04 | Tech stack changed from React Native → Android native (Kotlin) | True lock screen widget requires native; iOS blocked on Windows; Android-only accepted |
 | 2026-05-05 | Map library changed from Google Maps SDK → OSMDroid (OpenStreetMap) | Free, no billing setup, no API key needed, native Android library |
 | 2026-05-05 | API set finalised: SL Transport + SL Deviations + SL Journey Planner + GTFS Regional Realtime | SL Transport covers departures; GTFS Regional Realtime covers live vehicle positions; Deviations and Journey Planner cover Phase 2 reqs |
+| 2026-05-06 | Step 3 (P1-FR2) implemented on branch `step-3-commute-config`, merged to `main` after build verification | Marker tap or stop search opens a bottom sheet; user picks line+direction (loaded from SL departures), start/end time; saved to SharedPreferences with overlap rejection. Runtime test pending — collaborator to execute the smoke-test plan. |

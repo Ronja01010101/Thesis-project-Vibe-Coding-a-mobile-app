@@ -18,10 +18,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 30 |
+| Total entries | 34 |
 | Avg satisfaction | — |
-| Sessions | 3 |
-| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review |
+| Sessions | 4 |
+| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config |
 | Token checkpoint | run `/cost` to check |
 
 ---
@@ -372,6 +372,56 @@
 - **Agreement:** *(current entry)*
 - **Plan revised after:** No
 - **User feedback:** *(not provided)*
+- **Satisfaction:** —
+
+---
+
+## Phase: Step 3 — Commute Config + Stop Search
+*Session 4 — 2026-05-06*
+
+---
+
+### Entry 031
+- **Date:** 2026-05-06
+- **Prompt summary:** Session resumed; user confirmed they want to start Step 3 (commute config bottom sheet, stop search, overlap check) as designed in Entry 029.
+- **My response summary:** Created branch `step-3-commute-config`. Confirmed via WebFetch that SL Transport `/sites/{site_id}/departures` returns each departure with `line.id`, `line.designation`, `line.transport_mode`, `direction`, `direction_code`, wrapped in a top-level `departures` array. Built the full feature: (1) `DepartureDto` + `DeparturesResponse` DTOs, (2) extended `SlTransportService` with `getDepartures(siteId)`, (3) new `StopLineOption` model, (4) extended `StopRepository` with `getLineOptionsForStop(stopId)` returning unique (line, direction) pairs. (5) New `CommuteConfigStore` saving a JSON list to SharedPreferences with a `LocalTime` Gson type adapter, with `add()` rejecting overlaps and inverted windows. (6) `bottom_sheet_commute_config.xml` — stop name, line+direction Spinner, two MaterialTimePicker buttons, save button, error text. (7) `StopConfigBottomSheet` (BottomSheetDialogFragment) wired to `StopConfigViewModel`. (8) Search bar + RecyclerView overlay added on top of the map; `StopAdapter` for the result list. (9) `MainActivity` wires marker tap and search-result tap to open the bottom sheet. (10) Also fixed `Stop.id` to use `site.id` (the SL siteId path param) instead of `site.gid`. Build verified clean with both `compileDebugKotlin` and full `assembleDebug`. Two commits on the branch: `46fe804` (AGP bump from pre-existing diff) and `979286a` (Step 3). Push to GitHub initially failed (403 — auth issue); after the user re-logged in to gh, push succeeded.
+- **Agreement:** Partial — user accepted the implementation but flagged that runtime smoke-test cannot be performed on their machine.
+- **Plan revised after:** Yes — Step 3 marked Done (push pending) in REQUIREMENTS.md status tracker; Change Log entry added in PLAN.md.
+- **User feedback:** good, but have some issues. i cant confirm the changes because my computer cant physically run the emulator for the virtual phone.
+- **Satisfaction:** —
+
+---
+
+### Entry 032
+- **Date:** 2026-05-06
+- **Prompt summary:** User can't run the Android emulator on their computer, so they cannot execute the smoke-test plan I gave them after Step 3 was built and pushed.
+- **My response summary:** Acknowledged the constraint as a real-time issue we just hit. Offered three alternatives: (A) physical Android phone over USB+ADB with step-by-step setup; (B) collaborator runs the test; (C) merge on build-success alone and document the runtime-untested status in REQUIREMENTS.md / PLAN.md. Also (incorrectly) saved a long-term memory telling future sessions to stop proposing emulator test plans — user corrected this in the next message (see Entry 033).
+- **Agreement:** Partial — user wanted this issue logged, not turned into a rule.
+- **Plan revised after:** No
+- **User feedback:** "No! thats not what i wanted. I like that you propose manual testing. I wanted you to note this down in the usage log, since its an issue we just encountered."
+- **Satisfaction:** —
+
+---
+
+### Entry 033
+- **Date:** 2026-05-06
+- **Prompt summary:** User corrected me: keep proposing manual test plans (they like them), and just log the emulator issue in USAGE_LOG as a one-off incident — don't make it a permanent rule.
+- **Issue logged:** During Session 4, after Step 3's build was clean and pushed, the user could not execute the smoke-test plan because the development machine cannot physically run the Android emulator (AVD). This blocked runtime verification of Step 3 (marker tap → bottom sheet, search filter, line dropdown population, MaterialTimePicker, save with overlap rejection). Build verification (`./gradlew assembleDebug`) passed; runtime behavior remains unverified at the time of this log entry.
+- **My response summary:** Deleted the feedback memory and its index entry — the constraint shouldn't gate future test-plan proposals. Updated Entry 032 to reflect what actually happened. Logged this as the explicit "issue encountered" note the user asked for. Awaiting user's choice on testing path (physical device / collaborator / merge as-is).
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** No
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 034
+- **Date:** 2026-05-06
+- **Prompt summary:** User chose option B — collaborator will run the test plan — but asked to merge `step-3-commute-config` directly to `main` first so the collaborator can pull all changes in one go.
+- **My response summary:** Updated REQUIREMENTS.md status from "Done (push pending)" → "Done" with note "runtime test pending — collaborator". Updated PLAN.md change-log entry to reflect merge. Switched to `main`, pulled (already up-to-date), fast-forward merged `step-3-commute-config`, pushed `main` to origin. Then committed the three planning files (PLAN.md, REQUIREMENTS.md, USAGE_LOG.md) as a separate "update planning files" commit on `main` matching the Step 2 pattern, and pushed.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — Step 3 status finalised; main now contains all Step 3 work.
+- **User feedback:** *(pending — start next prompt with [[...]])*
 - **Satisfaction:** —
 
 ---

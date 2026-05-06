@@ -25,6 +25,7 @@ This is a DSR thesis artifact. The development process is being documented for a
 - API keys are stored in local.properties — never hardcode them
 - When starting a session, read USAGE_LOG.md to understand where we left off
 - Update USAGE_LOG.md after every response
+- **Never write personal information** (email addresses, full real names, work email domains, phone numbers, home/work addresses, local Windows usernames, machine paths beyond the project root, auth tokens, API keys, passwords, or anything that uniquely identifies a person beyond what's already public in the GitHub repo URL) into ANY committed project file — including USAGE_LOG.md, PLAN.md, BUGS.md, REQUIREMENTS.md, CLAUDE.md, code comments, or commit messages. The repo is public. If the user mentions any of these in conversation, summarise without quoting and use generic terms like "user", "collaborator", "their work email" instead.
 
 ## Project files
 - PLAN.md — living project plan with change log

@@ -18,10 +18,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 46 |
+| Total entries | 47 |
 | Avg satisfaction | — |
 | Sessions | 5 |
-| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning |
+| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction |
 | Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 ($5.10) |
 
 ---
@@ -579,6 +579,33 @@
 - **My response summary:** Read `local.properties` to confirm key variable names: `TRAFIKLAB_API_KEY`, `GTFS_REALTIME_KEY`, `GTFS_STATIC_KEY` (values not echoed; file is gitignored). We will use `GTFS_STATIC_KEY` for the build-time download script (Step 4a) and `GTFS_REALTIME_KEY` for live data polling (Step 5); the third key is parked. Added Entries 041–046 to USAGE_LOG.md to document the decision-change episode in detail. Added two new non-functional requirements to REQUIREMENTS.md: NFR9 (map-tile provider must comply with OSM tile-usage policy; default `tile.openstreetmap.org` is dev-only and must be switched to a third-party provider before wider distribution — applies even to free/non-commercial distribution because OSM's policy is volume-based, not commercial-status-based) and NFR10 (live-data polling cadence must respect Trafiklab Bronze API quotas — 10–15 s polling intervals during the active commute window). Added a Technical Constraint for the GTFS Regional Static dataset size (too large to download/parse on device; pre-processed at build time on a developer machine, shipped in `app/src/main/assets/`). Updated the Step 4 description in the Recommended Build Order to reflect the 4a/4b split and the build-time-extraction approach. Logged BUG-004 in BUGS.md for the tile-provider switch (deferred until distribution decisions are made). Added a PLAN.md change-log entry recording the Step 4 redesign with the explicit reasoning chain (initial proposal → user-provided links → second research pass → discovered sl-map.gunnar.se's build-time-extraction precedent → redesign). Saved a feedback memory: do not present technical implementation options for the user to choose between — research and decide. Reserve user-facing questions for product decisions and major scope changes.
 - **Agreement:** *(current entry — pending)*
 - **Plan revised after:** Yes — Step 4 design fully revised, two NFRs added, one Technical Constraint added, one new bug logged. Decision recorded in detail for thesis review.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+## Phase: Step 4a — Build-time GTFS Extraction
+
+---
+
+### Entry 047
+- **Date:** 2026-05-07
+- **Prompt summary:** "Sounds good. Go ahead!" — user authorised starting Step 4a implementation per the plan agreed in Entry 046 (build-time GTFS extraction Gradle task).
+- **My response summary:** Created branch `step-4a-gtfs-extraction`. Implemented the `extractGtfs` Gradle task in `app/build.gradle.kts`. The task downloads `sl.zip` from `opendata.samtrafiken.se`, extracts the standard GTFS files, picks one representative trip per `(route_id, direction_id)`, joins to stops, shapes, and stop_times, and writes a compact JSON to `app/src/main/assets/sl-lines.json`. **The implementation passed through four debug iterations:**
+  1. **Maven SSL cert chain failed** when Gradle tried to download `commons-csv` and `gson` — same root cause as the earlier git SSL issue (Windows JDK doesn't trust the user's VPN root CA). Fixed by adding `-Djavax.net.ssl.trustStoreType=Windows-ROOT` to `gradle.properties`. This is the JVM equivalent of the `git config http.sslBackend schannel` fix from earlier.
+  2. **Kotlin compiler crashed** with "Exception while generating code" on the `.kts` script. Cause: locally-declared `data class` inside the task lambda (`doLast { data class Route(...) }`) — the .kts compiler chokes on locally-nested data classes. Fixed by hoisting `GtfsRoute` and `GtfsRepTrip` to top-level definitions in the script.
+  3. **Trafiklab returned HTTP 406** with the helpful body `"This API must be called with the HTTP-header 'Accept-Encoding' set to 'gzip' or 'deflate'"`. Switched from bare `URL.openStream()` to a configured `HttpURLConnection` setting `Accept-Encoding: gzip, deflate`, plus a `User-Agent` and timeouts. Also added a defensive gzip/deflate response decoder (the server actually sent identity in our case).
+  4. **First successful run produced a 58.8 MB JSON.** Most of the bloat was Gson's pretty-printing emitting each polyline coordinate on its own indented line. Two fixes: (a) dropped pretty-printing — `GsonBuilder().disableHtmlEscaping().create()` — and (b) added a `round5(Double)` helper rounding lat/lon to 5 decimal places (~1.1 m accuracy, plenty for transit visualisation). Final size: 15.4 MB (73% reduction).
+
+  Final stats from the successful run: 71 MB sl.zip downloaded, 623 routes, 1166 representative trips (≈2 directions per route), 21823 stops loaded, 1165 shape polylines, 15.4 MB output JSON. Verified the app still builds with the asset bundled (`./gradlew assembleDebug` clean).
+
+  Also fixed a **latent bug** in the existing `app/build.gradle.kts`: the BuildConfig field `GTFS_REALTIME_KEY` was looking up the property as lowercase `gtfs_realtime_key`, but `local.properties` stores the value under uppercase `GTFS_REALTIME_KEY` — Properties lookup is case-sensitive, so the BuildConfig field was silently empty. Doesn't break anything yet (we don't use it until Step 5) but would have caused a confusing failure there.
+
+  Logged **BUG-005** in BUGS.md: some lines have empty `trip_headsign` in SL's feed, which means direction labels in the UI will be empty unless we fall back to the final-stop name. Deferred to Step 4b polish.
+
+  Committed implementation on the branch (`4be6503`), fast-forward merged to `main`, pushed. Updated REQUIREMENTS.md status (Step 4a → Done) and added a PLAN.md change-log entry covering the four debug iterations. Branch `step-4a-gtfs-extraction` left in place for now.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — Step 4a marked Done; BUG-005 logged.
 - **User feedback:** *(pending — start next prompt with [[...]])*
 - **Satisfaction:** —
 

@@ -172,7 +172,7 @@ Step 10 — Polish (NFR1–6)
 | Step 2 | Done | step-2-map-stops | OSMDroid map + SL stop markers, build verified |
 | Step 3 | Done | step-3-commute-config | Bottom sheet for commute config, stop search, overlap check, build verified (runtime test pending — collaborator) |
 | Step 3.5 | Done | step-3-5-limit-map-data | Emergency perf fix (NFR8). Render the 400 stops nearest the map center; rebuilt on map idle. Runtime-tested in emulator (2026-05-06). Two follow-ups in BUGS.md: BUG-002 (zoom-out cluster looks weird), BUG-003 (default marker icon too large). |
-| Step 4a | Not started | — | Build-time GTFS extractor (Gradle task) — produces `app/src/main/assets/sl-lines.json`. |
+| Step 4a | Done | step-4a-gtfs-extraction | `extractGtfs` Gradle task downloads sl.zip (~71 MB), extracts 623 lines / 1166 directions / 21823 stops / 1165 polylines, writes 15 MB compact JSON to `app/src/main/assets/sl-lines.json`. App build verified clean. Empty `headsign` on some lines noted as BUG-005. |
 | Step 4b | Not started | — | Render polylines + stop markers from the bundled JSON for each saved commute. |
 | Step 5 | Not started | — | |
 | Step 6 | Not started | — | |

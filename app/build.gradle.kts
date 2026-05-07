@@ -108,7 +108,12 @@ data class DirectionExport(
     val directionId: Int,
     val headsign: String,
     val stops: List<StopExport>,
-    val polyline: List<List<Double>>
+    val polyline: List<List<Double>>,
+    // All trip_ids that run this (route_id, direction_id). Used at runtime
+    // to filter the GTFS-RT VehiclePositions feed: SL's realtime feed
+    // populates trip.trip_id reliably (~98%) but trip.route_id only ~1%,
+    // so route filtering has to go via trip_id lookup.
+    val tripIds: List<String>
 )
 
 data class LineExport(
@@ -229,24 +234,30 @@ tasks.register("extractGtfs") {
         logger.lifecycle("Loaded ${routesById.size} routes")
 
         // 2) trips.txt: pick ONE representative trip per (route_id, direction_id)
+        //    AND collect ALL trip_ids per (route_id, direction_id) for runtime
+        //    GTFS-RT filtering.
         val representativeByKey = mutableMapOf<Pair<String, Int>, GtfsRepTrip>()
+        val allTripIdsByKey = mutableMapOf<Pair<String, Int>, MutableList<String>>()
         openGtfsCsv(extractDir.resolve("trips.txt")).use { parser ->
             parser.forEach { r ->
                 val routeId = r.get("route_id")
                 val directionId = r.get("direction_id")?.toIntOrNull() ?: 0
+                val tripId = r.get("trip_id")
                 val k = routeId to directionId
                 if (k !in representativeByKey) {
                     representativeByKey[k] = GtfsRepTrip(
-                        tripId = r.get("trip_id"),
+                        tripId = tripId,
                         shapeId = r.get("shape_id").takeUnless { it.isNullOrBlank() },
                         headsign = r.get("trip_headsign").orEmpty(),
                         routeId = routeId,
                         directionId = directionId
                     )
                 }
+                allTripIdsByKey.getOrPut(k) { mutableListOf() }.add(tripId)
             }
         }
-        logger.lifecycle("Selected ${representativeByKey.size} representative trips")
+        val totalTripIds = allTripIdsByKey.values.sumOf { it.size }
+        logger.lifecycle("Selected ${representativeByKey.size} representative trips (${totalTripIds} trip_ids total)")
 
         val neededTripIds = representativeByKey.values.map { it.tripId }.toHashSet()
         val neededShapeIds = representativeByKey.values.mapNotNull { it.shapeId }.toHashSet()
@@ -313,11 +324,13 @@ tasks.register("extractGtfs") {
                 val stopIds = stopSequencesByTrip[trip.tripId] ?: return@mapNotNull null
                 val stops = stopIds.mapNotNull { stopsById[it] }
                 val polyline = trip.shapeId?.let { shapesById[it] }.orEmpty()
+                val tripIds = allTripIdsByKey[trip.routeId to trip.directionId].orEmpty().toList()
                 DirectionExport(
                     directionId = trip.directionId,
                     headsign = trip.headsign,
                     stops = stops,
-                    polyline = polyline
+                    polyline = polyline,
+                    tripIds = tripIds
                 )
             }
             LineExport(

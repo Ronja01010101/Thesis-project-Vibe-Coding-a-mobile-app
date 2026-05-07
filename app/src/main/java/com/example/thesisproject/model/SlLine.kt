@@ -25,7 +25,15 @@ data class SlDirection(
     val headsign: String = "",
     val stops: List<SlStop> = emptyList(),
     /** Each polyline point is [lat, lon]. Coordinates rounded to 5 decimals (~1m). */
-    val polyline: List<List<Double>> = emptyList()
+    val polyline: List<List<Double>> = emptyList(),
+    /**
+     * All GTFS trip_ids that run this (route, direction). Used at runtime to
+     * filter the GTFS-RT VehiclePositions feed by trip_id (SL's realtime feed
+     * populates trip.trip_id reliably ~98% but trip.route_id only ~1%, so the
+     * filter has to go via trip_id lookup). Default empty for forward-compat
+     * with assets generated before this field was added.
+     */
+    val tripIds: List<String> = emptyList()
 )
 
 data class SlStop(

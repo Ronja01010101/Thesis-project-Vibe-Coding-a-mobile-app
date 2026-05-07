@@ -330,9 +330,14 @@ tasks.register("extractGtfs") {
                 val stops = stopIds.mapNotNull { stopsById[it] }
                 val polyline = trip.shapeId?.let { shapesById[it] }.orEmpty()
                 val tripIds = allTripIdsByKey[trip.routeId to trip.directionId].orEmpty().toList()
+                // BUG-005 fix: SL's GTFS leaves trip_headsign blank on many trips
+                // (notably bus 3 going either direction). Fall back to the final
+                // stop's name, which is the most natural direction label and
+                // matches what SL Transport API returns as the "direction" string.
+                val headsign = trip.headsign.ifBlank { stops.lastOrNull()?.name.orEmpty() }
                 DirectionExport(
                     directionId = trip.directionId,
-                    headsign = trip.headsign,
+                    headsign = headsign,
                     stops = stops,
                     polyline = polyline,
                     tripIds = tripIds

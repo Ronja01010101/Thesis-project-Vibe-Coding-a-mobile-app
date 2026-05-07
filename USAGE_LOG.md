@@ -18,11 +18,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 65 |
+| Total entries | 74 |
 | Avg satisfaction | — |
 | Sessions | 6 |
-| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction, Step 4b line rendering, Step 4b memory hotfix, Step 5 planning + smoke test, Step 5 implementation + iterations + BUG-005 fix |
-| Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 Checkpoint 3 ($9.61, post-Step-4b runtime test + memory hotfix) |
+| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction, Step 4b line rendering, Step 4b memory hotfix, Step 5 planning + smoke test, Step 5 implementation + iterations + BUG-005 + BUG-009 v1/v2/v3 |
+| Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 Checkpoint 4 ($30.90, post-Step-5 done with BUG-005 + BUG-009 fixed) |
 
 ---
 
@@ -64,6 +64,25 @@
 **Cumulative day total:** $5.10 + $8.61 + $9.61 = **$23.32** across three local sessions, all 2026-05-07. ~2h 3m total wall time.
 
 **Thesis-relevant observation:** the Step 4b memory bug would *not* have been caught by the build-verify pass alone — only runtime testing on the emulator surfaced it via the Logcat GC pressure pattern. The ~$2–3 of token spend on the diagnostic + hotfix iteration is small relative to the value of catching a bug that would otherwise have shipped broken. Worth flagging for the article: AI-assisted implementation reaches "build-clean" quickly, but runtime / hardware testing remains essential for non-trivial code paths.
+
+### Checkpoint 4 — Session 6 post-Step-5 (2026-05-07, ~7:42pm)
+- **Cost:** $30.90 (fourth local session of the day; counter cumulative across the full Step 5 implementation arc + four-iteration BUG-009 fix + BUG-005 fix + diagnostic logging cycles)
+- **Wall time:** 3h 22m 35s · **API time:** 1h 7m 11s
+- **Code changes:** +1163 / −94 lines (Step 5 client + tracker + repository updates + asset regen × 2 + planning files + commute removal UI)
+- **Model usage:**
+  - `claude-opus-4-7` — 12.9k input · 252.0k output · 35.2M cache read · 1.0M cache write — **$30.28**
+  - `claude-haiku-4-5` — 400.0k input · 10.8k output · 17 web searches — **$0.62**
+- **Limit usage at snapshot:** 10% of current 5h session window, 11% of weekly limit (all models).
+- **Usage characteristics from /cost summary:** 100% subagent-heavy (research agent for Trafiklab API docs); 78% of usage at >150k context; 63% from sessions active 8+ hours.
+- **Notes:** ~$0.15/min over 3h 22m wall — *cheaper* per-minute than Step 4a/4b implementation despite the heavier scope, because most of the wall-time was the user iterating on the emulator between fix versions (low Claude activity). The cumulative $30.90 is high because of multiple compounding factors: (1) four BUG-009 fix iterations (v1 directionCode-as-GTFS-direction_id assumption, v2 code-1 heuristic, v3 stop-sequence-aware after consulting docs, v4 diagnostic-only log enhancement) each requiring a build/commit cycle, (2) full asset regeneration (`extractGtfs`) twice during the step (extending tripIds; BUG-005 final-stop fallback) — each regen ~20s of work plus the resulting 18.6 MB file in subsequent diffs, (3) heavy planning-file updates per the new logging discipline rules introduced mid-step (USAGE_LOG entries written per-prompt, BUGS.md updated per fix iteration, CLAUDE.md updated twice with new rules), (4) one full research-agent cycle (~$0.30 of haiku web searches) for Trafiklab API documentation that should have been the FIRST thing done, not the THIRD iteration.
+
+**Cumulative day total:** $5.10 + $8.61 + $9.61 + $30.90 = **$54.22** across four local sessions, all 2026-05-07. ~5h 25m total wall time.
+
+**Thesis-relevant observations from Step 5:**
+1. **Documentation-first would have saved 1-2 fix iterations.** BUG-009 v1 and v2 were heuristic guesses about Trafiklab's `direction_code` semantics; v3 (stop-sequence-aware) was derived directly from the OpenAPI spec + a Trafiklab support thread the moment we consulted them. The new CLAUDE.md rule "always consult docs before guessing about API field semantics" is precisely the pattern this step should have followed from prompt one of BUG-009.
+2. **Diagnostic logging is high-leverage.** The smoke test cross-check (live trip_ids vs static asset) and the per-poll Log.d in LivePositionTracker each cost <30 minutes to write and unambiguously identified the root causes (multi-route designation collision in entry 062, SL 1-based direction_code in entry 070, stop-sequence-vs-heuristic disambiguation in entry 074). Without those, we'd have iterated blindly.
+3. **Per-prompt USAGE_LOG write discipline matters when iterations stack.** Mid-step (entry 058) the user reminded me to log per-prompt; later (entry 065) they tightened the rules further. The delta between batched and per-prompt logs is whether the thesis reviewer can see the *decision path* (why each fix attempt was made, what data drove it) versus just the *outcome*. For an AI-assisted-build paper, the decision path is the artifact.
+4. **AI-assisted dev tends to drift toward "plausible-looking heuristics" without domain pressure.** Three of my four BUG-009 fix proposals were reasonable-sounding code that didn't reference any documentation. The user's explicit "go read the docs" prompt was the corrective. Worth recommending in the article: explicit "show me the doc citation" rules in CLAUDE.md / equivalents.
 
 ---
 
@@ -949,6 +968,17 @@
 - **Plan revised after:** Yes — CLAUDE.md updated with documentation-first rule. Process change for thesis-traceability.
 - **User feedback:** *(pending)*
 - **Satisfaction:** Manual test outcome (of v3): inconclusive without stopName log. **Pending one more iteration** (rebuild, delete + re-save, retest with new diagnostic). Two-bug-fix iterations turned into a 3-version fix arc + a documentation rule update — thesis-relevant pattern: AI-assisted dev needs explicit "check the docs" rules to avoid heuristic drift.
+
+---
+
+### Entry 074
+- **Date:** 2026-05-07
+- **Prompt summary:** User pasted Logcat from final retest after re-saving the line 57 → Sofia commute. Critical evidence: `config: stopName='Tullgårdsparken', directionCode=2, direction='Sofia', direction_id=1 headsign='Tengdahlsgatan' tripIds=288`.
+- **My response summary:** **Step 5 / BUG-009 fully resolved.** `stopName='Tullgårdsparken'` confirms the user re-saved through the bottom sheet, so the new stop-sequence-aware matching path executed (it runs first in matchDirection priority). It picked direction_id=1 — the same answer the v2 heuristic gave us, but now arrived at via Trafiklab's documentation-aligned approach. The fact that both algorithms agree confirms: Tullgårdsparken → ... → Sofia → ... → Tengdahlsgatan is the actual route ordering for line 57 direction_id=1. We're tracking 3 buses currently heading from the user's stop toward Sofia (and the route's terminus Tengdahlsgatan). Step 5 (P1-FR4 — Fetch live vehicle-position data only for selected line, direction, and time window) is functionally complete: live polling at 20s, filtered by trip_id (Trafiklab's recommended reconciliation), gated to active commute window, runs only while app is foregrounded (NFR10). Per new CLAUDE.md rule, asked the user to run `/cost` and paste the snapshot before marking Step 5 Done in REQUIREMENTS.md and merging to main. Started the wrap-up edits in parallel: BUG-005 and BUG-009 status changes from "Fixed pending runtime test" to "Fixed 2026-05-07", REQUIREMENTS.md Step 5 → Done, PLAN.md change-log entry covering the Step 5 implementation + BUG-009 three-version fix arc.
+- **Agreement:** Step 5 implementation complete; awaiting `/cost` snapshot before formal close.
+- **Plan revised after:** Yes — Step 5 marks Done; BUG-005 and BUG-009 Fixed; PLAN.md change log entry to be added.
+- **User feedback:** *(pending)*
+- **Satisfaction:** Manual test outcome: **needed 4 iterations** (v1 directionCode-based — tried direction_id=2, fell through; v2 added code-1 heuristic — flipped to direction_id=1, principle-less; v3 stop-sequence-aware after consulting docs — same direction_id=1, principled; v4 diagnostic-only log enhancement to confirm path execution). The substantive fix worked first try at v3 once we consulted docs. Bug count for Step 5 implementation: 2 (BUG-005 fully fixed, BUG-008 deferred, BUG-009 fully fixed). Total Step 5 commits on branch: ~14 (smoke test, extractGtfs extension, model+repo, runtime impl, diagnostic logging, multi-route fix, BUG-005 fix, BUG-009 v1, BUG-009 v2, BUG-009 v3, plus planning-files updates).
 
 ---
 

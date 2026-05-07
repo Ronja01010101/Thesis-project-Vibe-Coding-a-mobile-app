@@ -22,7 +22,7 @@
 | Avg satisfaction | — |
 | Sessions | 6 |
 | Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction, Step 4b line rendering, Step 4b memory hotfix, Step 5 planning + smoke test, Step 5 implementation + iterations + BUG-005 + BUG-009 v1/v2/v3 |
-| Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 Checkpoint 4 ($30.90, post-Step-5 done with BUG-005 + BUG-009 fixed) |
+| Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 Checkpoint 5 ($11.09, post-Step-6 done with vehicles on map + 4 UI bugs fixed) |
 
 ---
 
@@ -77,6 +77,24 @@
 - **Notes:** ~$0.15/min over 3h 22m wall — *cheaper* per-minute than Step 4a/4b implementation despite the heavier scope, because most of the wall-time was the user iterating on the emulator between fix versions (low Claude activity). The cumulative $30.90 is high because of multiple compounding factors: (1) four BUG-009 fix iterations (v1 directionCode-as-GTFS-direction_id assumption, v2 code-1 heuristic, v3 stop-sequence-aware after consulting docs, v4 diagnostic-only log enhancement) each requiring a build/commit cycle, (2) full asset regeneration (`extractGtfs`) twice during the step (extending tripIds; BUG-005 final-stop fallback) — each regen ~20s of work plus the resulting 18.6 MB file in subsequent diffs, (3) heavy planning-file updates per the new logging discipline rules introduced mid-step (USAGE_LOG entries written per-prompt, BUGS.md updated per fix iteration, CLAUDE.md updated twice with new rules), (4) one full research-agent cycle (~$0.30 of haiku web searches) for Trafiklab API documentation that should have been the FIRST thing done, not the THIRD iteration.
 
 **Cumulative day total:** $5.10 + $8.61 + $9.61 + $30.90 = **$54.22** across four local sessions, all 2026-05-07. ~5h 25m total wall time.
+
+### Checkpoint 5 — Session 7 post-Step-6 (2026-05-07, ~9:10pm)
+- **Cost:** $11.09 (fifth local session of the day, this one covering the entire Step 6 arc end-to-end: design-question discussion, core implementation, polish bundle after first runtime test, runtime confirmation on a different commute)
+- **Wall time:** 1h 27m 40s · **API time:** 19m 34s
+- **Code changes:** +313 / −24 lines (vehicle marker rendering + bearing rotation + auto-fit camera + 4 UI fix bundle + planning files for both runtime test cycles)
+- **Model usage:**
+  - `claude-opus-4-7` — 2.6k input · 79.4k output · 10.3M cache read · 633.0k cache write — **$11.09**
+  - `claude-haiku-4-5` — 341 input · 12 output · 0 cache read · 0 cache write — **$0.0004**
+- **Limit usage at snapshot:** 23% of current 5h session window, 12% of weekly limit (all models). Sonnet untouched.
+- **Usage characteristics from /cost summary:** 92% subagent-heavy (general-purpose 4% — only one subagent call this entire step, vs Checkpoint 4's heavy research-agent burn); 74% of usage at >150k context.
+- **Notes:** ~$0.13/min over 1h 28m wall — slightly cheaper per-minute than Step 5 ($0.15/min) and substantially cheaper in absolute terms ($11.09 vs $30.90, ~64% reduction). The drop is attributable to several factors: (1) zero documentation rabbit hole (Step 6 didn't need new API research — building on Step 5's already-correct GTFS-RT pipeline), (2) only one runtime-test iteration to surface UI issues (Step 5 had four for BUG-009 alone), (3) no asset regeneration, (4) implementation pattern reused existing MainActivity scaffolding (palette + index-based color selection, async polyline cache, lifecycle hooks already in place from Step 5). Cumulative day total now: $54.22 + $11.09 = **$65.31** across five local sessions, ~6h 53m total wall time.
+
+**Thesis-relevant observations from Step 6:**
+1. **Cost compresses sharply when scaffolding is reused.** Step 6's $11.09 added live vehicle markers + a 4-bug UI polish pass for ~36% of Step 5's spend — but this was only possible because Step 5 had already established the tracker, the `TrackingState` sealed class, the polling loop, the lifecycle gating, the multi-commute palette pattern, and the async polyline loading infrastructure. The cost curve isn't linear with feature count; it's sub-linear when each step builds on solid prior steps.
+2. **The "ship → user runtime tests → small UX issues bundled together" loop costs less than guarding against UX issues up-front.** Step 6 shipped four UX issues in the first runtime test (couldn't-close-popup, big-icons, zoom-controls-overlap, distracting-stops-on-load) and fixed all four in one ~150 LOC commit. If we'd designed up-front to anticipate them (e.g. spent a planning round speculating about what UI rough edges might exist), we'd have spent more tokens on speculation than the actual fix bundle cost.
+3. **Documentation-first rule paid off this step (by absence).** Per the rule added in Step 5, no API guesses were attempted in Step 6 — all field semantics referenced (`v.position.bearing`, `hasBearing()`, `Marker.rotation` direction convention) were either already-verified-from-Step-5 or in OSMDroid Javadoc. Net Step-6 documentation lookups: zero, because Step 5 absorbed the documentation cost preemptively. Methodologically interesting: a process rule's value can be invisible when it's working (no fix iterations to point at).
+
+---
 
 **Thesis-relevant observations from Step 5:**
 1. **Documentation-first would have saved 1-2 fix iterations.** BUG-009 v1 and v2 were heuristic guesses about Trafiklab's `direction_code` semantics; v3 (stop-sequence-aware) was derived directly from the OpenAPI spec + a Trafiklab support thread the moment we consulted them. The new CLAUDE.md rule "always consult docs before guessing about API field semantics" is precisely the pattern this step should have followed from prompt one of BUG-009.

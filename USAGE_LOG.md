@@ -18,10 +18,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 52 |
+| Total entries | 65 |
 | Avg satisfaction | — |
-| Sessions | 5 |
-| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction, Step 4b line rendering, Step 4b memory hotfix |
+| Sessions | 6 |
+| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction, Step 4b line rendering, Step 4b memory hotfix, Step 5 planning + smoke test, Step 5 implementation + iterations + BUG-005 fix |
 | Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 Checkpoint 3 ($9.61, post-Step-4b runtime test + memory hotfix) |
 
 ---
@@ -708,6 +708,157 @@
 - **My response summary:** (1) Updated CLAUDE.md "Rules for Claude" to expand the session-start reading rule from "USAGE_LOG.md only" to "PLAN.md → REQUIREMENTS.md → BUGS.md → last 5–10 entries of USAGE_LOG.md", and updated the Project files section to mention BUGS.md (which didn't exist when CLAUDE.md was last edited). (2) Updated REQUIREMENTS.md status tracker — Step 4b row now reads "Done (runtime tested 2026-05-07)" with a note about the memory hotfix and BUG-006. (3) Added a PLAN.md change-log entry for the runtime test + hotfix, including a methodological observation about runtime testing being essential even after build-clean. (4) Logged BUG-006 in BUGS.md (UI jank during sheet interactions, low priority). (5) Added Token Checkpoint 3 to USAGE_LOG.md ($9.61, 41m 46s, +369/−66 lines) with cumulative-day total ($23.32) and thesis-relevant cost-vs-bug-detection observation. (6) Added Entries 049–052 to USAGE_LOG.md (this entry). (7) Updated Summary Stats (entries 48 → 52, phases logged extended). About to commit as `update planning files: ...` and push.
 - **Agreement:** *(current entry — pending)*
 - **Plan revised after:** Yes — CLAUDE.md updated (process rule), planning files all reflect Step 4 fully complete, Step 5 is the unambiguous next-up with all context logged for a fresh session to pick up.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+## Phase: Step 5 — Live Data Fetching (Planning + Smoke Test)
+
+---
+
+### Entry 053
+- **Date:** 2026-05-07
+- **Prompt summary:** "Welcome — start by reading the planning files per CLAUDE.md, then propose an approach for Step 5" — Session 6 opens. Fresh session as planned in Entry 052.
+- **My response summary:** Read PLAN.md, REQUIREMENTS.md, BUGS.md, and the last 12 entries of USAGE_LOG.md per the new CLAUDE.md session-start rule. Confirmed Step 5 (P1-FR4 — fetch live vehicle positions for selected line/direction/window via GTFS Regional Realtime) is the next step. Sketched the build into eight sub-pieces (realtime client → active-commute selector → filter → polling loop → state surface → uncertainty flagging → verification overlay → branching/build verify). Surfaced four technical concerns: (1) protobuf format requires a parser library not currently in the project, (2) Bronze quota is tighter than realised — even at 12s polling, ~5 days of continuous polling would exhaust the monthly cap, (3) endpoint URL + library choice should be confirmed before coding because Step 4a's URL/header surprises cost a debug iteration, (4) the foreground-service vs coroutine decision interacts with Step 8's lockscreen widget. Asked two process-level questions via AskUserQuestion: research-first or jump in, and split-into-sub-steps or single step.
+- **Agreement:** Yes for "research first, then implement"; user delegated the split decision back to me, I chose to keep Step 5 as a single step (verification UI is too small to warrant a 5b).
+- **Plan revised after:** No (yet) — Step 5 plan being formed.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 054
+- **Date:** 2026-05-07
+- **Prompt summary:** Implicit in user's "research first" answer — proceeded with research agent.
+- **My response summary:** Spawned a general-purpose research agent (WebFetch + WebSearch enabled) to confirm: exact SL VehiclePositions endpoint URL, required headers, library recommendation, field-population guarantees, feed shape and refresh rate, real-world Android-Kotlin precedents, gotchas. Agent returned high-confidence findings citing primary sources (Trafiklab OpenAPI YAML, MobilityData GitHub README, Trafiklab support threads, sl-map.gunnar.se, GTFS-RT spec). Six concrete plan-affecting findings: (1) endpoint and auth confirmed (`opendata.samtrafiken.se/gtfs-rt/sl/VehiclePositions.pb?key=...`, query-string auth, no header auth); (2) `Accept-Encoding: gzip, deflate` is mandatory (same trap as static, OkHttp handles automatically); (3) `org.mobilitydata:gtfs-realtime-bindings:0.0.8` is the standard library — pure Java, ~1.5 MB DEX growth, may need ProGuard keep rules at minification time; (4) **`vehicle.trip.route_id` and `direction_id` are NOT guaranteed populated** — `trip_id` is the reliable filter, requiring a static-side join; (5) feed is one big blob (1500+ vehicles) — must filter client-side; (6) Bronze quota of 30 000/month allows ~5 days of continuous 15s polling, so polling MUST be gated to active-commute window. Also: API keys are product-scoped (wrong product → "Key does not have access" — important to verify upfront); 304 Not Modified responses may or may not count against quota; no published Android-Kotlin SL GTFS-RT example exists (thesis-relevant fact). Reported the findings as a synthesis with one "this changes the plan" highlight (the trip_id problem requiring an extractGtfs extension), two risks (quota + key scope), and the proposed step-1 smoke test. Asked the user to authorise.
+- **Agreement:** *(passes through to Entry 055)*
+- **Plan revised after:** Yes — research established that route_id filtering is unworkable; extractGtfs needs a tripIds extension. Quota concerns sharpened; foreground-only polling rule for Step 5 made explicit (Step 8 widget will need a foreground service).
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 055
+- **Date:** 2026-05-07
+- **Prompt summary:** "Hmm, even if they close the app - during their active commute window they will have a widget lockscreen following the gps coordinates. But we could increase the update time if needed, start at 20s intervals, aka 3 times a min? And add a bug/feature that we can add later at low priority, that limits the active time window to max 30 minutes for a user" — user pushed back on my "foreground-only" assumption (correctly — the lockscreen widget by definition runs when the app is closed) and proposed two quota-saving levers: 20s polling baseline + 30-min window cap.
+- **My response summary:** Acknowledged the widget point (Step 8 will use a foreground service — this is a Step 8 concern, not Step 5). Showed the math at 20s polling: 30/60/90 min daily polling = 9%/18%/27% of Bronze monthly quota. Plenty of headroom; Bronze is comfortable. Noted two follow-ups to capture: (a) update NFR10 from "10–15s polling" to "20s baseline, may dial down later if quota allows", and (b) log BUG-007 for the 30-min window cap (low-priority feature applied in the bottom-sheet config UI). Asked again to kick off the smoke test.
+- **Agreement:** Yes — "Hell yeah kick it off!"
+- **Plan revised after:** Yes — NFR10 reworded, BUG-007 logged (both committed in Entry 056).
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 056
+- **Date:** 2026-05-07
+- **Prompt summary:** "Hell yeah kick it off!" — user authorised the smoke test.
+- **My response summary:** Created branch `step-5-live-data`. Verified `gradle.properties` already has the Windows trust-store fix from Step 4a so we shouldn't hit the SSL chain issue twice. Made three edits: (1) updated NFR10 in REQUIREMENTS.md to reflect the 20s polling baseline + foreground-only rule for Step 5; (2) logged BUG-007 in BUGS.md for the 30-min window cap; (3) added `org.mobilitydata:gtfs-realtime-bindings:0.0.8` to the buildscript classpath in `app/build.gradle.kts` and a new `smokeTestRealtime` Gradle task that hits `opendata.samtrafiken.se/gtfs-rt/sl/VehiclePositions.pb`, decodes any gzip response, parses with `FeedMessage.parseFrom`, and reports field population stats. Ran `./gradlew smokeTestRealtime`. **Smoke test passed in 12s.** HTTP 200, 170 KB body, gzip-decoded fine, protobuf parsed cleanly. Population stats from 1817 entities: 100% have position, 100% have timestamp, 99.5% have trip object, **98.2% have trip_id**, but only **1.3% have route_id and 1.3% have direction_id** — even worse than the research warned. Empirically confirms: route_id-based filtering is dead on arrival; trip_id-based filtering is mandatory. Sample entity: lat=60.1315, lon=18.64611, trip_id=14010000710632692 (long numeric-looking string — must be treated as opaque, never parsed to long). Reported findings + proposed extending extractGtfs to dump `tripIds: List<String>` per direction.
+- **Agreement:** Yes — user authorised the commit + extractGtfs extension.
+- **Plan revised after:** Yes — Step 5 sub-steps confirmed: extractGtfs extension is unavoidable; proceed with build.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+## Phase: Step 5 — Implementation, Runtime Iterations, BUG-005 Fix
+
+---
+
+### Entry 057
+- **Date:** 2026-05-07
+- **Prompt summary:** "Yes" — user authorised committing the smoke-test prep work and proceeding with the extractGtfs extension to add `tripIds` per direction.
+- **My response summary:** Loaded TaskCreate via ToolSearch and registered six tasks for the remaining Step 5 work (commit smoke prep, extend extractGtfs, update model, add runtime protobuf dep, build realtime client + tracker, verification overlay). Marked task #1 in_progress, committed the smoke-test prep work as `1ecd7d9`. Edited `extractGtfs` to also collect a `tripIds: List<String>` per direction during the trips.txt pass; added `tripIds` to `DirectionExport`. Re-ran `./gradlew extractGtfs`: regenerated `sl-lines.json` from 15 MB → 18.6 MB, now containing 144,120 trip_ids across 1166 directions. Updated `SlDirection` model in app code to mirror the new field with a default empty list (forward-compat for older assets). Build verified clean. Committed as `c9e3b78`.
+- **Agreement:** Implicit — work continued cleanly.
+- **Plan revised after:** No new plan changes; Step 5 sub-tasks #1–#3 done.
+- **User feedback:** *(pending)*
+- **Satisfaction:** —
+
+---
+
+### Entry 058
+- **Date:** 2026-05-07
+- **Prompt summary:** "Dont forget to log everything in usage log" — mid-implementation reminder while I was extending extractGtfs.
+- **My response summary:** Acknowledged. Updated the USAGE_LOG header (entries 48 → 56, sessions 5 → 6, added "Step 5 planning + smoke test" phase). Added Entries 053–056 in detail covering: session opening + research-first decision, research agent findings (endpoint, library, trip_id-only filtering), 20s polling decision + BUG-007, smoke test result. Continued with the implementation per task list.
+- **Agreement:** N/A (process correction).
+- **Plan revised after:** No plan change; logging discipline reinforced.
+- **User feedback:** *(pending)*
+- **Satisfaction:** —
+
+---
+
+### Entry 059
+- **Date:** 2026-05-07
+- **Prompt summary:** "Yes go ahead" — user authorised plowing ahead with tasks 4–6 (runtime protobuf dep, realtime client, tracker, polling loop, verification overlay) as one chunk.
+- **My response summary:** Read the existing `VehiclePosition.kt` from Step 1 (fits the realtime use case exactly — vehicleId, tripId, lineId, direction, lat, lon, timestampMs, dataSource, quality) so we reuse rather than create a new model. Added `org.mobilitydata:gtfs-realtime-bindings:0.0.8` as a runtime `implementation` dep alongside the existing buildscript classpath entry; logged a code comment that ProGuard keep rules will be needed when minification is enabled (release builds currently have `isMinifyEnabled=false` so we skipped them for now). Created `repository/GtfsRealtimeRepository.kt` (OkHttp call → protobuf parse → filter by trip_id set → map to `VehiclePosition` with `DataQuality.LIVE` if age <60s else `UNCERTAIN`); `tracking/TrackingState.kt` (sealed class: Idle, NoActiveCommute, Polling, Error); `tracking/LivePositionTracker.kt` (active-commute selector by current time-of-day, 20s polling coroutine gated to active-commute window, time-window-with-midnight-cross logic, StateFlow surface). Wired MainActivity: lazy tracker, `onResume`/`onPause` start/stop, lifecycleScope.launch collector → renderTrackingState → bottom-of-screen `liveStatusView` TextView. Added the TextView to `activity_main.xml`. **One debug iteration:** OkHttp 3.14.9 was forced by transitive deps (instead of expected 4.x), so `response.code` and `response.body` are functions in 3.x not properties — fixed with `.code()` / `.body()` syntax. Build verified clean. Committed as `0eb76cd`. Issued runtime test plan (4 scenarios: no commute, active commute, background, outside-window).
+- **Agreement:** Implicit — chunk completed.
+- **Plan revised after:** No plan change.
+- **User feedback:** *(pending)*
+- **Satisfaction:** —
+
+---
+
+### Entry 060
+- **Date:** 2026-05-07
+- **Prompt summary:** User runs the new build and reports "I got to step two, where it shut down after idling for a little bit" + a long Logcat dump. They report no crash dialog — app just disappeared.
+- **My response summary:** Read the entire Logcat dump carefully. **No FATAL EXCEPTION present** — the app didn't crash in the Kotlin/JVM sense. Heap was healthy at end (6 MB / 12 MB heap, 49% free). What DID happen at 17:41:34: `WindowInsets changed: navigationBars:null` immediately followed by `InputDispatcher: Channel is unrecoverably broken` and `PROCESS ENDED`. That sequence — window removed → channel broken → process ended with healthy heap — is Android's normal background-process kill, not a crash. Most likely the emulator screen dimmed/timed out or focus was lost, then the system reclaimed our background process. Explained to the user this is exactly the reason Step 8 (lockscreen widget) needs a foreground service: in Step 5 we explicitly chose foreground-only polling, so this Android behaviour is a known limitation, not a bug. Asked three diagnostic questions: what did the overlay show right before death, did the screen dim, and could they re-test keeping the app actively in the foreground.
+- **Agreement:** Diagnosis pending user confirmation.
+- **Plan revised after:** No plan change yet.
+- **User feedback:** *(pending)*
+- **Satisfaction:** Manual test outcome: **needed iteration** — app appeared to crash in normal use (background kill on idle). Reported as user-experienced crash; root cause is Android lifecycle, not a code bug; full fix is the Step 8 foreground service.
+
+---
+
+### Entry 061
+- **Date:** 2026-05-07
+- **Prompt summary:** User retested with the app foregrounded. Reported app stable, configured a commute, status bar shows "live: line 17 → Hässelby strand — 0 vehicles, updated 0s ago", and the counter is not updating.
+- **My response summary:** Acknowledged two distinct issues: (1) "0s ago not updating" is a UI quirk — the overlay only re-renders when the StateFlow emits, which happens every 20s; same-text-rendered-twice looks frozen. Easy fix: add a 1-second age ticker. (2) "0 vehicles" is the more interesting problem; two suspects worth investigating before changing code: (a) multiple GTFS routes share `lineDesignation = "17"`, and our `Map<String, SlLineEntry>` keeps only the last parsed (might be wrong route), or (b) SL's realtime feed uses different `trip_id` format than static. Decided to extend the smoke test with an asset-vs-feed cross-check before changing code. Implemented the cross-check (load asset's full set of trip_ids, fetch live feed, count overlap, line-17 specific check, top designations by trip_id count). One Kotlin compile error initially (`java.io.InputStreamReader` fully-qualified didn't resolve in `.kts` — fixed by relying on the existing import). Ran the cross-check: **100% of 1625 live trip_ids ARE in the static asset; line "17" has 1708 trip_ids in the asset and 10 are currently live**. So the trip_id format is fine and there ARE live line-17 trips. Conclusion: suspect (a) is correct — multi-route designation collision, repository keeps wrong entry. Added `LiveTracking`-tagged Log.d in LivePositionTracker (matched routeId, routeType, headsign, tripIds size) and GtfsRealtimeRepository (feed entity count, matching count) so the next runtime test will surface the actual matched route_type. Added the 1s age ticker in MainActivity (`ageTickerJob` started in onResume, cancelled in onPause; re-renders only when state is Polling). Build clean. Committed as `f24945a`.
+- **Agreement:** Diagnostics shipped, user to retest and paste filtered Logcat.
+- **Plan revised after:** No plan change yet — diagnosis-first.
+- **User feedback:** *(pending)*
+- **Satisfaction:** Manual test outcome: **needed iteration** — first build looked broken (frozen text + 0 vehicles); root cause TBD pending Logcat from next run.
+
+---
+
+### Entry 062
+- **Date:** 2026-05-07
+- **Prompt summary:** User retested with the diagnostic build. Pasted Logcat showing repeated `LiveTracking` lines: `matched designation=3 routeId=9011008000300000 routeType=1000 -> direction.headsign='' (config wanted 'Karolinska sjukhuset'), tripIds=68` and `fetched feed: 1616 entities, 1569 with trip_id, 0 match our 68-tripId filter (line 3, dir )`. Also reported a separate observation: the polyline for the new commute didn't draw on the map (suspected to be because it overlaps a previous commute), asked to log that as a low-priority bug. Also asked for a way to remove saved commutes so they could keep iterating without rebuilding.
+- **My response summary:** **Diagnostic confirmed the multi-route hypothesis decisively.** `routeType=1000` is GTFS extended type "Water Transport services" — a boat. The user's "line 3 → Karolinska sjukhuset" was matching a SL ferry/boat line 3, not the bus 3 they wanted. The boat's directions had no headsign matching "Karolinska sjukhuset", so `matchDirection` fell through to first-direction-fallback (with empty headsign), and 0 of the boat's 68 trip_ids were live. This is also why "line 17 → Hässelby strand" failed earlier — same multi-route mechanism. Fix: changed `SlLineRepository.getMatchedLines` return type from `Map<String, SlLineEntry>` to `Map<String, List<SlLineEntry>>` (keep ALL entries per designation, not just the last parsed); changed `matchConfig` to (1) order entries by transport-mode preference using the `transportMode` already saved on `CommuteConfig` from the bottom sheet — mapped BUS/METRO/TRAIN/TRAM/SHIP onto GTFS basic types (0–7) PLUS extended Hierarchical Vehicle Type ranges (700–799 bus, 400–699 metro, 100–399 train, 900–999 tram, 1000–1099/1200–1299 ship), then (2) for each entry in priority order try to find a direction matching `config.direction`. Adapted MainActivity and LivePositionTracker callers to the new type. Implemented commute removal: added `CommuteConfigStore.removeAt(index)`, added a "Commutes" button to `activity_main.xml` next to the search bar, and `openManageCommutesDialog()` in MainActivity that shows an AlertDialog with each saved commute as `MODE Line → Direction\nHH:MM-HH:MM`; tap to delete; refreshes overlays via `rebuildCommuteOverlays()`. Logged BUG-008 in BUGS.md for the polyline-overlap rendering issue (suspected causes: same colour from 5-element palette cycle, z-order, or stroke-alpha overlap). Build clean. Committed as `ba88294`.
+- **Agreement:** Plan revised on the spot — root cause + fix shipped together because the diagnosis was unambiguous.
+- **Plan revised after:** Yes — SlLineRepository's data structure changed; transport-mode disambiguation logic added; BUG-008 added; commute-management UI added.
+- **User feedback:** *(pending)*
+- **Satisfaction:** Manual test outcome: **needed 2 iterations** — first iteration (Entry 060) was a system-kill misdiagnosed as a crash; second iteration (Entry 061 → 062) found the real bug (multi-route designation collision, route_type 1000 boat instead of route_type 700 bus). Both iterations were thesis-relevant: one surfaced a Step 8 prerequisite (foreground service), one surfaced a real correctness bug in route lookup that diagnostic logging caught cleanly.
+
+---
+
+### Entry 063
+- **Date:** 2026-05-07
+- **Prompt summary:** User retested with the multi-route fix. Reported: "i think it works? cant see the busses on the map but it says '6 vehicles, updated 0 seconds ago' in 20 s intervals." Pasted Logcat showing `matched designation=3 routeId=9011001000300000 routeType=700 -> direction.headsign='' (config wanted 'Karolinska sjukhuset'), tripIds=709` and `fetched feed: 1497 entities, 1463 with trip_id, 6 match our 709-tripId filter`.
+- **My response summary:** **Step 5 is functionally working.** `routeType=700` is the extended GTFS bus type — we matched bus 3, not the boat. `tripIds=709` (the bus's direction) and 6 currently-live vehicles are being tracked. Polling firing every 20s. Three things to address: (1) "Cant see buses on map" is Step 6, not Step 5. P1-FR4 (Step 5) is *fetching* live data; P1-FR5 (Step 6) is *displaying* on the map. The bottom black bar IS the Step 5 deliverable. (2) The 1s ticker — confirmed working from user follow-up. (3) **Direction headsign is still empty** — bus 3 in particular has blank `trip_headsign` in SL's GTFS (BUG-005). Our `matchDirection` couldn't find a non-blank headsign matching "Karolinska sjukhuset", fell back to first direction (empty headsign). The 709 tripIds are one direction's slice, but we don't actually know if it's the toward-Karolinska direction or the away-from-Karolinska direction. The overlay text is fine (it shows the saved config's direction string verbatim) but the underlying filter is direction-blind. Asked the user whether to fix BUG-005 now or wrap Step 5 with the limitation noted.
+- **Agreement:** N/A (decision-pending).
+- **Plan revised after:** No plan change.
+- **User feedback:** "it ticks between polls!" (1s ticker confirmed working) + explanation of how SL direction semantics work: the destination sign on the bus IS the direction; if a bus is signed "Karolinska sjukhuset" it's going toward Karolinska, otherwise it's signed with a different final-stop name. This confirms `trip_headsign` SHOULD be the direction key, and BUG-005's blank-headsign issue is a real correctness bug.
+- **Satisfaction:** Manual test outcome: **worked first try after Entry 062 fix** — Step 5 plumbing functions end-to-end (fetch, parse, filter by trip_id, surface vehicle count). Direction-correctness is downgraded to "tracks one direction's worth of vehicles, but possibly the wrong direction" — pending BUG-005 fix.
+
+---
+
+### Entry 064
+- **Date:** 2026-05-07
+- **Prompt summary:** User picked "Fix now, then wrap Step 5" for BUG-005 (via AskUserQuestion).
+- **My response summary:** Implemented the BUG-005 fix in `extractGtfs`: when a representative trip's `trip_headsign` is blank, fall back to the name of the trip's final stop (which is unique per direction and matches what SL Transport API returns as the "direction" string). Three lines of change in extractGtfs's per-direction loop: `val headsign = trip.headsign.ifBlank { stops.lastOrNull()?.name.orEmpty() }`. Re-ran extractGtfs: `sl-lines.json` regenerated from 18.6 MB → 18.6 MB (+16 KB from the longer headsign strings). Build verified clean. BUGS.md: BUG-005 status changed from "Low" to "Fixed pending runtime test" with a fix-shipped note. Committed as `2afca5f`. Issued the user a focused retest plan: the next Logcat line should show `direction.headsign='Karolinska sjukhuset'` instead of empty, `tripIds` should drop roughly in half (709 → ~350), and the vehicle count should drop to ~3 instead of 6 because we're now filtering to one direction only.
+- **Agreement:** Yes — fix shipped per user's choice.
+- **Plan revised after:** Yes — BUG-005 scope clarified: it's not just a UI label issue, it was actually preventing direction-correct filtering in Step 5.
+- **User feedback:** *(pending — user is currently testing)*
+- **Satisfaction:** Manual test outcome: pending.
+
+---
+
+### Entry 065
+- **Date:** 2026-05-07
+- **Prompt summary:** User asked (while testing BUG-005 fix) to enforce stricter logging discipline going forward: USAGE_LOG updated for every prompt (not batched), `/cost` snapshot at every step transition, BUGS.md keeps fixed entries (don't delete), PLAN.md / REQUIREMENTS.md updated whenever meaningful changes happen, and full decision-path documentation when blockers / disagreements / user-blocker-decisions occur. Also asked that for every manual test, the entry capture whether it worked first time or required iterations.
+- **My response summary:** Acknowledged the slip — I had been batching log updates instead of writing per-prompt. Updated CLAUDE.md "Rules for Claude" with five new rules: (1) USAGE_LOG.md after every prompt, never batch; (2) prompt user for `/cost` at every step transition, log to Token Checkpoints, only then mark Done; (3) log manual-test outcomes as "worked first time" or "needed N iterations"; (4) log full decision paths (options, tradeoffs, user choice, why) for blockers / disagreements / user-blocker-decisions; (5) keep BUGS.md as a permanent record — fixed bugs marked, never deleted. Updated the Project files description to reflect the permanent-record nature of BUGS.md and the new entry/checkpoint/test-outcome contents of USAGE_LOG.md. Back-filled USAGE_LOG entries 057–064 covering the gap from "Yes go ahead" through the BUG-005 fix, including manual-test outcomes per entry. About to commit CLAUDE.md + USAGE_LOG.md updates as a planning-files commit on the step-5-live-data branch.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — process rules updated in CLAUDE.md so this slip doesn't recur in future sessions.
 - **User feedback:** *(pending — start next prompt with [[...]])*
 - **Satisfaction:** —
 

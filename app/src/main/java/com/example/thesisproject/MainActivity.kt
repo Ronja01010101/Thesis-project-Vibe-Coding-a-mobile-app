@@ -21,7 +21,6 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.example.thesisproject.model.SlLineCatalog
 import com.example.thesisproject.model.Stop
 import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.SlLineRepository
@@ -29,6 +28,7 @@ import com.example.thesisproject.ui.MapViewModel
 import com.example.thesisproject.ui.StopAdapter
 import com.example.thesisproject.ui.StopConfigBottomSheet
 import com.google.android.material.card.MaterialCardView
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
@@ -62,8 +62,8 @@ class MainActivity : AppCompatActivity() {
     // Step 4b: saved-commute overlays drawn on top of regular stop markers.
     private val commuteStore by lazy { CommuteConfigStore(this) }
     private val lineRepository by lazy { SlLineRepository(this) }
-    private var lineCatalog: SlLineCatalog? = null
     private val commuteOverlays: MutableList<Overlay> = mutableListOf()
+    private var rebuildJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -117,16 +117,8 @@ class MainActivity : AppCompatActivity() {
             this
         ) { _, _ -> rebuildCommuteOverlays() }
 
-        // Load the bundled line catalog (sl-lines.json, ~15 MB) off the main
-        // thread, then draw whatever commutes are already saved.
-        lifecycleScope.launch {
-            lineCatalog = try {
-                lineRepository.getCatalog()
-            } catch (e: Exception) {
-                null
-            }
-            rebuildCommuteOverlays()
-        }
+        // Initial draw — if there are no saved commutes this is a no-op.
+        rebuildCommuteOverlays()
     }
 
     private fun setupSearch() {
@@ -212,44 +204,65 @@ class MainActivity : AppCompatActivity() {
 
     /**
      * Step 4b: For each saved commute config, find the matching line+direction
-     * in the bundled GTFS catalog and draw its polyline + stop markers.
-     * Called once after the catalog finishes loading and again whenever a new
+     * in the bundled GTFS data and draw its polyline + stop markers. Streams
+     * just the matching line entries from sl-lines.json so we don't blow heap
+     * with the full catalog. Called on activity start and whenever a new
      * commute is saved (via the FragmentResultListener).
      */
     private fun rebuildCommuteOverlays() {
-        val catalog = lineCatalog ?: return
+        rebuildJob?.cancel()
         val configs = commuteStore.getAll()
+        val designations = configs
+            .mapNotNull { it.lineDesignation?.takeIf { d -> d.isNotBlank() } }
+            .toSet()
 
+        // Always clear first so the map state is consistent immediately.
         commuteOverlays.forEach { map.overlays.remove(it) }
         commuteOverlays.clear()
-
-        configs.forEachIndexed { index, config ->
-            val color = COMMUTE_PALETTE[index % COMMUTE_PALETTE.size]
-            val matched = lineRepository.matchConfig(catalog, config) ?: return@forEachIndexed
-            val (_, direction) = matched
-
-            if (direction.polyline.isNotEmpty()) {
-                val polyline = Polyline()
-                polyline.setPoints(direction.polyline.map { GeoPoint(it[0], it[1]) })
-                polyline.outlinePaint.color = color
-                polyline.outlinePaint.strokeWidth = 12f
-                polyline.outlinePaint.alpha = 180  // semi-transparent so overlapping commutes are visible
-                map.overlays.add(polyline)
-                commuteOverlays.add(polyline)
-            }
-
-            val dotIcon = makeStopDot(color)
-            direction.stops.forEach { stop ->
-                val marker = Marker(map)
-                marker.position = GeoPoint(stop.lat, stop.lon)
-                marker.title = "${config.lineDesignation ?: "?"}: ${stop.name}"
-                marker.icon = dotIcon
-                marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                map.overlays.add(marker)
-                commuteOverlays.add(marker)
-            }
+        if (designations.isEmpty()) {
+            map.invalidate()
+            return
         }
-        map.invalidate()
+
+        rebuildJob = lifecycleScope.launch {
+            val matched = try {
+                lineRepository.getMatchedLines(designations)
+            } catch (e: Exception) {
+                emptyMap()
+            }
+            if (matched.isEmpty()) {
+                map.invalidate()
+                return@launch
+            }
+
+            configs.forEachIndexed { index, config ->
+                val color = COMMUTE_PALETTE[index % COMMUTE_PALETTE.size]
+                val pair = lineRepository.matchConfig(matched, config) ?: return@forEachIndexed
+                val (_, direction) = pair
+
+                if (direction.polyline.isNotEmpty()) {
+                    val polyline = Polyline()
+                    polyline.setPoints(direction.polyline.map { GeoPoint(it[0], it[1]) })
+                    polyline.outlinePaint.color = color
+                    polyline.outlinePaint.strokeWidth = 12f
+                    polyline.outlinePaint.alpha = 180
+                    map.overlays.add(polyline)
+                    commuteOverlays.add(polyline)
+                }
+
+                val dotIcon = makeStopDot(color)
+                direction.stops.forEach { stop ->
+                    val marker = Marker(map)
+                    marker.position = GeoPoint(stop.lat, stop.lon)
+                    marker.title = "${config.lineDesignation ?: "?"}: ${stop.name}"
+                    marker.icon = dotIcon
+                    marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    map.overlays.add(marker)
+                    commuteOverlays.add(marker)
+                }
+            }
+            map.invalidate()
+        }
     }
 
     private fun makeStopDot(color: Int): Drawable {

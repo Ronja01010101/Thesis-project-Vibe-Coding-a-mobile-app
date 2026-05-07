@@ -3,43 +3,79 @@ package com.example.thesisproject.repository
 import android.content.Context
 import com.example.thesisproject.model.CommuteConfig
 import com.example.thesisproject.model.SlDirection
-import com.example.thesisproject.model.SlLineCatalog
 import com.example.thesisproject.model.SlLineEntry
 import com.google.gson.Gson
+import com.google.gson.stream.JsonReader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.InputStreamReader
+import java.nio.charset.StandardCharsets
 
 /**
- * Reads and caches the bundled `sl-lines.json` asset (produced by the
- * `extractGtfs` Gradle task). The JSON is large (~15 MB) so the first
- * call is slow — always invoke from a background coroutine.
+ * Reads the bundled `sl-lines.json` asset (~15 MB) but **does not** load it
+ * fully into memory. Streams through with Gson's [JsonReader] and keeps only
+ * the line entries whose designations match a passed-in set — typically the
+ * 1–3 lines the user has saved as commutes. This caps sustained heap use at
+ * ~100 KB instead of the ~10–15 MB the full catalog object graph would use.
+ *
+ * If [getMatchedLines] is called with an empty set, no parse happens at all.
  */
 class SlLineRepository(private val context: Context) {
 
     @Volatile
-    private var cachedCatalog: SlLineCatalog? = null
+    private var cachedDesignations: Set<String>? = null
 
-    suspend fun getCatalog(): SlLineCatalog = withContext(Dispatchers.IO) {
-        cachedCatalog?.let { return@withContext it }
-        val json = context.applicationContext.assets.open(ASSET_NAME)
-            .bufferedReader().use { it.readText() }
-        val parsed = Gson().fromJson(json, SlLineCatalog::class.java)
-        cachedCatalog = parsed
-        parsed
+    @Volatile
+    private var cachedMatched: Map<String, SlLineEntry>? = null
+
+    suspend fun getMatchedLines(designations: Set<String>): Map<String, SlLineEntry> {
+        if (designations.isEmpty()) return emptyMap()
+        cachedMatched?.let { cached ->
+            if (cachedDesignations == designations) return cached
+        }
+        return withContext(Dispatchers.IO) {
+            val gson = Gson()
+            val result = mutableMapOf<String, SlLineEntry>()
+            context.applicationContext.assets.open(ASSET_NAME).use { stream ->
+                JsonReader(InputStreamReader(stream, StandardCharsets.UTF_8)).use { reader ->
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        when (reader.nextName()) {
+                            "lines" -> {
+                                reader.beginArray()
+                                while (reader.hasNext()) {
+                                    val entry: SlLineEntry = gson.fromJson(reader, SlLineEntry::class.java)
+                                    if (entry.lineDesignation in designations) {
+                                        result[entry.lineDesignation] = entry
+                                    }
+                                    // Non-matching entries become unreachable here and will be GC'd
+                                    // before the next iteration — keeping peak memory tiny.
+                                }
+                                reader.endArray()
+                            }
+                            else -> reader.skipValue()
+                        }
+                    }
+                    reader.endObject()
+                }
+            }
+            cachedMatched = result
+            cachedDesignations = designations
+            result
+        }
     }
 
     /**
-     * Finds the line + direction in [catalog] that matches a saved [config].
-     * Match strategy:
-     *   1. Exact case-insensitive headsign match
-     *   2. Headsign contains the config's direction string (or vice versa)
-     *   3. Fall back to the line's first direction
-     * Returns null if the config has no designation (legacy save) or the
-     * designation isn't in the catalog.
+     * Finds the line + direction in [matched] that corresponds to [config].
+     * Returns null if the config has no designation (legacy save) or its
+     * designation isn't in the matched map.
      */
-    fun matchConfig(catalog: SlLineCatalog, config: CommuteConfig): Pair<SlLineEntry, SlDirection>? {
+    fun matchConfig(
+        matched: Map<String, SlLineEntry>,
+        config: CommuteConfig
+    ): Pair<SlLineEntry, SlDirection>? {
         val designation = config.lineDesignation?.takeIf { it.isNotBlank() } ?: return null
-        val line = catalog.lines.firstOrNull { it.lineDesignation == designation } ?: return null
+        val line = matched[designation] ?: return null
         val direction = matchDirection(line, config.direction) ?: return null
         return line to direction
     }

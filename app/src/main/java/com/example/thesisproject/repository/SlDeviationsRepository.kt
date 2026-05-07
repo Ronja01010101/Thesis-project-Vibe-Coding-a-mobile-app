@@ -26,11 +26,23 @@ import java.util.concurrent.TimeUnit
  * server returns 304 with no body if nothing has changed, which we surface as
  * [FetchResult.NotModified] so callers can keep their cached list.
  *
- * Server-side filtering: we always pass `?line=<id>&site=<id>&future=true` so
- * the server only returns deviations affecting the user's active commute. The
+ * Server-side filtering: we pass `?line=<id>&future=true` so the server only
+ * returns deviations affecting the user's active commute's line. The
  * `future=true` flag includes upcoming deviations; client-side time-window
  * filtering happens in [LivePositionTracker] (we want active-now plus upcoming
  * during the commute window, not weeks-out planned work).
+ *
+ * **Why no `site` filter** — first runtime test (2026-05-07, Step 7) showed
+ * the API's `&site=<id>` param requires the deviation's `scope.stop_areas`
+ * to literally include the user's stop id. SL writes deviations per affected
+ * stop (e.g. "Jungfrugatan stop relocated") even when the deviation is part
+ * of a route-wide situation. Filtering by site dropped relevant deviations
+ * affecting a different stop on the user's line. False negatives (missing a
+ * deviation that affects the user's bus showing up at their stop) are
+ * dangerous; false positives (a deviation a few stops away that may or may
+ * not affect them) are mild noise the user can read past in the details.
+ * Per project scope memory: app's job is pre-trip decision support, not
+ * journey planning — broad surfacing + user judgement is the right tradeoff.
  */
 class SlDeviationsRepository(
     private val client: OkHttpClient = defaultClient(),
@@ -46,14 +58,12 @@ class SlDeviationsRepository(
 
     suspend fun fetchDeviations(
         lineId: Int,
-        siteId: Int,
         etag: String? = null,
         includeFuture: Boolean = true
     ): FetchResult = withContext(Dispatchers.IO) {
         val url = buildString {
             append(ENDPOINT)
             append("?line=").append(lineId)
-            append("&site=").append(siteId)
             if (includeFuture) append("&future=true")
         }
         val request = Request.Builder()
@@ -65,7 +75,7 @@ class SlDeviationsRepository(
 
         client.newCall(request).execute().use { response ->
             if (response.code() == 304) {
-                Log.d(TAG, "304 not-modified line=$lineId site=$siteId")
+                Log.d(TAG, "304 not-modified line=$lineId")
                 return@withContext FetchResult.NotModified
             }
             if (!response.isSuccessful) {
@@ -81,7 +91,7 @@ class SlDeviationsRepository(
                 emptyList()
             }
             val deviations = dtos.mapNotNull { it.toDomain() }
-            Log.d(TAG, "fetched ${deviations.size} deviations (raw=${dtos.size}) line=$lineId site=$siteId etag=$newEtag")
+            Log.d(TAG, "fetched ${deviations.size} deviations (raw=${dtos.size}) line=$lineId etag=$newEtag")
             FetchResult.Modified(deviations, newEtag)
         }
     }

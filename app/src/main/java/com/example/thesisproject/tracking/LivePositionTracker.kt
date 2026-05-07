@@ -126,9 +126,11 @@ class LivePositionTracker(
         }
         Log.d(TAG, "fetched ${vehicles.size} vehicles matching ${direction.tripIds.size} tripIds for line=$designation dir=${direction.headsign}")
 
-        // Reset deviation cache if active commute's line/site changed since last
-        // deviation fetch. Otherwise, only re-fetch every DEVIATION_POLL_RATIO ticks.
-        val key = active.lineId to active.stopId
+        // Reset deviation cache if active commute's line changed since last
+        // deviation fetch. (Stop is intentionally not part of the key — see
+        // SlDeviationsRepository's docs for why we don't filter by site.)
+        // Otherwise, only re-fetch every DEVIATION_POLL_RATIO ticks.
+        val key = active.lineId to ""
         val keyChanged = key != cachedDeviationKey
         if (keyChanged) {
             cachedDeviationKey = key
@@ -151,19 +153,15 @@ class LivePositionTracker(
 
     private suspend fun fetchDeviations(active: CommuteConfig) {
         val lineIdInt = active.lineId.toIntOrNull()
-        val siteIdInt = active.stopId.toIntOrNull()
-        if (lineIdInt == null || siteIdInt == null) {
-            // CommuteConfig.lineId / stopId aren't integer-parseable. Could
-            // happen for very old saves predating SL Transport integration.
-            // Surface the issue once per fetch attempt so it's visible in
-            // Logcat without spamming.
-            Log.w(TAG, "Skipping deviations: lineId='${active.lineId}' siteId='${active.stopId}' not integer-parseable")
+        if (lineIdInt == null) {
+            // CommuteConfig.lineId isn't integer-parseable. Could happen for
+            // very old saves predating SL Transport integration.
+            Log.w(TAG, "Skipping deviations: lineId='${active.lineId}' not integer-parseable")
             return
         }
         try {
             val result = deviationsRepository.fetchDeviations(
                 lineId = lineIdInt,
-                siteId = siteIdInt,
                 etag = cachedDeviationEtag,
                 includeFuture = true
             )

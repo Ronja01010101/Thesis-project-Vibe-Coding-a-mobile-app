@@ -18,10 +18,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 40 |
+| Total entries | 46 |
 | Avg satisfaction | — |
-| Sessions | 4 |
-| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config |
+| Sessions | 5 |
+| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning |
 | Token checkpoint | run `/cost` to check |
 
 ---
@@ -487,6 +487,83 @@
 - **My response summary:** Confirmed: working tree on `main` is clean, no uncommitted changes; `main` is in sync with origin at `885aee0`. Today's commits on main: `ee65401`, `46b53b8`, `916f6c8`, `d7a72bd`, `dfb7500`, `611fc20`, `0774244`, `885aee0` (Step 3.5 implementation, debugging iterations, cleanup, planning files). REQUIREMENTS.md status tracker has Step 3.5 marked Done with BUG-002 / BUG-003 noted. PLAN.md change-log has the Step 3.5 emergency-fix entry and the resolution entry. BUGS.md contains BUG-001 (Nordic chars in search), BUG-002 (cluster-at-center on zoom out), BUG-003 (oversized marker icon). USAGE_LOG.md is current through Entry 040 with Session 4 closing here.
 - **Agreement:** *(end of session — Session 4 closes here)*
 - **Plan revised after:** No — wrap-up only.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+## Phase: Step 4 — Map Visualization (Planning)
+
+---
+
+### Entry 041
+- **Date:** 2026-05-07
+- **Prompt summary:** "okay! lets continue?" — Session 5 opens after Session 4 closed at the end of Step 3.5.
+- **My response summary:** Confirmed prior session wrap state (working tree clean, main in sync at 558d1be). Proposed next step is Step 4 — Map Visualization (P1-FR3): draw the user's saved commute lines on the map. Asked two design questions: (1) Which saved commute(s) to draw — auto-pick the active one by time-of-day, draw all configs simultaneously, or add a manual picker? (2) Confirm branch name `step-4-line-on-map`. Flagged a technical issue up front: SL Transport API does NOT expose route geometry, so polylines must come from elsewhere. Suggested two options — (i) connect stop coordinates with straight lines (cheap, looks rough on curved routes), or (ii) pull GTFS Regional Static `shapes.txt` for proper geometry (heavier, separate download, needs caching).
+- **Agreement:** Yes — user picked geometry option (ii) and answered the config-drawing question
+- **Plan revised after:** No (yet)
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 042
+- **Date:** 2026-05-07
+- **Prompt summary:** "No we need the actual routes to be able to have accurate estimates on expected arrival time etc. And for 1. config — maybe draw all of them on the map but the commute that is in its time-window is the only one tracked on the lockscreen?"
+- **My response summary:** Recorded both design decisions: (a) accurate route geometry is required (not straight stop-to-stop lines) because Step 5 ETA accuracy depends on knowing where the vehicle is *along* the route, and (b) all saved commutes drawn on the map but the lockscreen widget only tracks the commute whose time-window contains "now" (lockscreen logic deferred to Step 8). Flagged that real geometry pulls in significantly more work — GTFS Regional Static is the only practical source for SL route shapes, and the dataset is large. Recommended splitting Step 4 into 4a (GTFS static plumbing — download, parse, cache; expose `getRoute(line, direction) → (orderedStops, polylinePoints)`; no UI) and 4b (map drawing — draw polylines + stop markers per saved config). Recommended a research pass before committing to a design.
+- **Agreement:** Yes — research first
+- **Plan revised after:** Yes — Step 4 to be split into 4a/4b; 4a/4b design pending research
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 043
+- **Date:** 2026-05-07
+- **Prompt summary:** "yeah can you do some research here? and should i paste the API key somewhere? I need us to be sure we dont have too much performance issues. Because our app relies on accurate real time data location and prediction later when we deploy it. So choose what you think suits this best."
+- **My response summary:** Spawned a research agent (general-purpose, with WebFetch / WebSearch) to investigate Trafiklab GTFS Regional Static practicalities: dataset URL, key requirements, file size, refresh cadence, license, parser library options, storage strategy, minimal schema, link to realtime, line-designation mapping. Findings reported by the agent: (1) Dataset is `sl.zip` from `opendata.samtrafiken.se/gtfs/sl/sl.zip?key={key}`; same Trafiklab registration covers static and realtime (separate rate limits). (2) ~49 MB zip, ~300–500 MB unzipped; `stop_times.txt` is 5–15 million rows. (3) Refresh weekly is plenty. (4) CC0 license; OSM tiles need attribution. (5) Recommended OpenCSV for parsing. (6) Recommended SQLite/Room for storage to avoid OOM. (7) Static feed needed before realtime is fully usable (for trip_id resolution). (8) `route_short_name` matches SL designation if joined with `route_type`. **I disagreed with the SQLite recommendation** — for our use case (1–3 saved commutes max) SQLite + Room would add significant complexity (entities, DAOs, migrations) for a database that gets queried ~3 times. I proposed a simpler alternative: download the zip once, stream-parse only when the user adds/changes a commute (filter at parse time), cache result as a per-route JSON file. Asked the user three follow-up questions about the design.
+- **Agreement:** Pending — user responded that they had no basis to evaluate the questions
+- **Plan revised after:** No (still in design)
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 044
+- **Date:** 2026-05-07
+- **Prompt summary:** "I have 0 programming skills and dont know how to answer any of these three questions. Before we move on, can you find the answer anywhere in documentation?" — user provided five reference links: (1) stranne.github.io/SL.se-api-specs (third-party SL.se spec doc), (2) sl-map.gunnar.se/about.html (similar SL map project), (3) trafiklab.se/api/ (official portal), (4) github.com/trafiklab/trafiklab.se (official Trafiklab site source), (5) github.com/fltman/stockholms-puls (similar Stockholm SL project). Asked Claude to read these and reassess the plan critically.
+- **My response summary:** Acknowledged the questions had been programmer-level. Spawned a second research agent to fetch all five URLs and report on tech-stack patterns, simpler alternatives, key naming conventions, and gotchas the prior research missed. **The agent crashed mid-fetch** — Bun (Claude Code's runtime) hit a segmentation fault after kicking off three of the five fetches. No output produced. Confirmed crash to user from screenshot.
+- **Agreement:** N/A (crash, no findings)
+- **Plan revised after:** No (no findings produced yet)
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 045
+- **Date:** 2026-05-07
+- **Prompt summary:** "you crashed :( can you read this screenshot?" — user shared a screenshot of the Bun panic / segmentation fault.
+- **My response summary:** Confirmed the crash was a runtime bug (Bun, not the prompt). Restarted the research agent with a slightly tighter scope. The new run completed successfully and **changed the design**:
+  - **sl-map.gunnar.se ingests GTFS at BUILD TIME, not on the device.** A clear precedent for pre-processing the GTFS zip on a developer machine and shipping the extracted compact result with the app. This eliminates: (a) the 49 MB download from end-user devices, (b) the on-device CSV parse (potentially 30–90 s on a slow emulator), (c) the SQLite/Room complexity, (d) the Trafiklab Bronze static-quota concern (50 calls/month).
+  - **Map tile policy:** raw `tile.openstreetmap.org` (which OSMDroid uses by default via `TileSourceFactory.MAPNIK`) is forbidden by OSM's tile usage policy for production / distributed apps regardless of commercial intent — the policy is volume-based. Fine for dev right now; must be switched (CartoDB / MapTiler / similar) before any wider distribution. Logged for later.
+  - **Realtime polling cadence:** Trafiklab Bronze GTFS Realtime allows 50 calls/min, 30 k/month. Plan for 10–15 second polling intervals (not 2 s) during the active commute window in Step 5.
+  - **Key naming convention:** in-the-wild precedent is `TRAFIKLAB_KEY` (stockholms-puls). I recommended `TRAFIKLAB_API_KEY` as a clearer expansion.
+  - Negative findings: stranne SL.se spec pages 404, fltman/stockholms-puls hand-curates a small geometry file (doesn't generalise), Trafiklab's own repo has no Android-specific guidance.
+
+  Based on these findings I revised Step 4a from "download + parse on device + per-route JSON cache" to "**build-time extraction script (runs on a developer machine) → ship compact route data inside `app/src/main/assets/` → app reads JSON at startup, no on-device GTFS download or parsing**". Asked the user to add the API key to `local.properties` and confirm the redesign.
+- **Agreement:** Yes — user accepted the redesign
+- **Plan revised after:** Yes — Step 4a fundamentally redesigned (on-device parse → build-time extraction). Two new non-functional concerns surfaced (tile-provider policy; realtime polling cadence on Bronze quota).
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 046
+- **Date:** 2026-05-07
+- **Prompt summary:** User flagged this as "our first decision oopsie" since the original tech-stack decisions, and made the meta-observation that they have no technical basis to evaluate design choices Claude proposes — they can only "leave it up to" Claude. Asked for thorough logging of the decision-change episode (so a thesis reviewer can trace what caused the plan to change), asked to add the tile-server fix in an appropriate place, noted the project will be free if ever distributed publicly, and confirmed they had added all three Trafiklab keys they have to `local.properties`.
+- **My response summary:** Read `local.properties` to confirm key variable names: `TRAFIKLAB_API_KEY`, `GTFS_REALTIME_KEY`, `GTFS_STATIC_KEY` (values not echoed; file is gitignored). We will use `GTFS_STATIC_KEY` for the build-time download script (Step 4a) and `GTFS_REALTIME_KEY` for live data polling (Step 5); the third key is parked. Added Entries 041–046 to USAGE_LOG.md to document the decision-change episode in detail. Added two new non-functional requirements to REQUIREMENTS.md: NFR9 (map-tile provider must comply with OSM tile-usage policy; default `tile.openstreetmap.org` is dev-only and must be switched to a third-party provider before wider distribution — applies even to free/non-commercial distribution because OSM's policy is volume-based, not commercial-status-based) and NFR10 (live-data polling cadence must respect Trafiklab Bronze API quotas — 10–15 s polling intervals during the active commute window). Added a Technical Constraint for the GTFS Regional Static dataset size (too large to download/parse on device; pre-processed at build time on a developer machine, shipped in `app/src/main/assets/`). Updated the Step 4 description in the Recommended Build Order to reflect the 4a/4b split and the build-time-extraction approach. Logged BUG-004 in BUGS.md for the tile-provider switch (deferred until distribution decisions are made). Added a PLAN.md change-log entry recording the Step 4 redesign with the explicit reasoning chain (initial proposal → user-provided links → second research pass → discovered sl-map.gunnar.se's build-time-extraction precedent → redesign). Saved a feedback memory: do not present technical implementation options for the user to choose between — research and decide. Reserve user-facing questions for product decisions and major scope changes.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — Step 4 design fully revised, two NFRs added, one Technical Constraint added, one new bug logged. Decision recorded in detail for thesis review.
 - **User feedback:** *(pending — start next prompt with [[...]])*
 - **Satisfaction:** —
 

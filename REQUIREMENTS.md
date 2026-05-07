@@ -13,6 +13,7 @@
 | SL Deviations | Disruptions, cancellations | No |
 | SL Journey Planner | Route planning (Phase 2) | No |
 | GTFS Regional Realtime | Live vehicle GPS positions (protobuf format) | Yes (Trafiklab) |
+| GTFS Regional Static | Route geometry (polylines), stop sequences per line, schedule data | Yes (Trafiklab) — used at build time only, not by the device |
 
 ## Map Library
 
@@ -89,6 +90,8 @@
 | NFR6 | Log API response status, timestamp, validation result, and update errors during development |
 | NFR7 | Modular structure — live-data, map, user settings, disruption, and notification functions developed and tested separately |
 | NFR8 | Limit rendered map markers to the current viewport (with a hard cap on count) so the app stays responsive on low-spec hardware and emulators |
+| NFR9 | Map tile provider must comply with the OpenStreetMap Foundation's tile usage policy. Default `tile.openstreetmap.org` (used by `TileSourceFactory.MAPNIK`) is for development only — switch to a third-party provider (CartoDB / MapTiler / Mapbox / similar) before any wider distribution. The OSM policy is volume-based, not commercial-status-based, so this applies even to free / non-commercial distribution. |
+| NFR10 | Live-data polling cadence must respect Trafiklab API quotas. On the Bronze tier (50 calls/min, 30 000/month for GTFS Realtime), poll at 10–15 second intervals during the active commute window — not faster. |
 
 ---
 
@@ -101,6 +104,7 @@
 | GTFS Realtime uses protobuf (binary format) | Step 5 | Not plain JSON — requires a protobuf parsing library (e.g. `google-protobuf` or GTFS-RT Kotlin bindings). Plan for this in Step 5. |
 | App Widget minimum refresh = 30 minutes (standard timer only) | Step 8 | The built-in widget auto-refresh timer is capped at 30 minutes. This does NOT apply when a foreground service pushes updates — use a foreground service to push widget updates every 30–60 seconds during active commute. Foreground service requires a persistent notification while running (Android mandatory). |
 | INTERNET permission required | Step 2 onwards | Must be declared in `AndroidManifest.xml` before any API calls will work. |
+| GTFS Regional Static dataset is large (~49 MB compressed, ~300–500 MB unzipped; `stop_times.txt` is 5–15 million rows) | Step 4a | Too large to download and parse on a low-spec emulator. Decision: pre-process on a developer machine (Gradle task or standalone script) that downloads `sl.zip`, extracts only the needed columns from `routes.txt` / `trips.txt` / `shapes.txt` / `stops.txt` / `stop_times.txt`, and writes a compact JSON to `app/src/main/assets/`. The app only reads the small JSON at runtime. Refresh = re-run the extractor and ship a new app version. |
 
 ---
 
@@ -124,7 +128,20 @@ Step 3.5 — Limit map data (NFR8) — emergency fix
   killed the emulator on both collaborators' machines.
 
 Step 4 — Map visualization (P1-FR3)
-  Draw selected line and stops on map
+  Split into two sub-steps because route geometry isn't exposed by SL Transport
+  and the GTFS Regional Static feed is too large to handle on-device:
+
+  Step 4a — Build-time GTFS extraction
+    Gradle task / standalone script that downloads sl.zip from Trafiklab using
+    GTFS_STATIC_KEY, extracts the per-line polylines and ordered stop sequences,
+    writes a compact JSON file to app/src/main/assets/. Re-run rarely (weekly or
+    less). The app does NOT download or parse GTFS itself.
+
+  Step 4b — Render from assets
+    App reads the bundled JSON at startup. For each saved commute config, draw
+    a coloured polyline + highlighted stop markers on the existing map. All
+    saved commutes drawn together; "active" config (lockscreen tracking) handled
+    later in Step 8.
 
 Step 5 — Live data fetching (P1-FR4, DS.Req.7–8)
   Connect to GTFS Regional Realtime, fetch only for selected line/direction/window
@@ -155,7 +172,8 @@ Step 10 — Polish (NFR1–6)
 | Step 2 | Done | step-2-map-stops | OSMDroid map + SL stop markers, build verified |
 | Step 3 | Done | step-3-commute-config | Bottom sheet for commute config, stop search, overlap check, build verified (runtime test pending — collaborator) |
 | Step 3.5 | Done | step-3-5-limit-map-data | Emergency perf fix (NFR8). Render the 400 stops nearest the map center; rebuilt on map idle. Runtime-tested in emulator (2026-05-06). Two follow-ups in BUGS.md: BUG-002 (zoom-out cluster looks weird), BUG-003 (default marker icon too large). |
-| Step 4 | Not started | — | |
+| Step 4a | Not started | — | Build-time GTFS extractor (Gradle task) — produces `app/src/main/assets/sl-lines.json`. |
+| Step 4b | Not started | — | Render polylines + stop markers from the bundled JSON for each saved commute. |
 | Step 5 | Not started | — | |
 | Step 6 | Not started | — | |
 | Step 7 | Not started | — | |

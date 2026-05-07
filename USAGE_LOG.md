@@ -897,4 +897,15 @@
 
 ---
 
+### Entry 069
+- **Date:** 2026-05-07
+- **Prompt summary:** User pasted Logcat from a fresh run after the BUG-009 fix. Logs show identical behaviour to pre-fix: `matched designation=57 ... direction.headsign='Motalavägen' (config wanted 'Sofia'), tripIds=281`. Vehicle count 3-4 (varies normally with live data).
+- **My response summary:** Two possible interpretations of the unchanged log: (a) user didn't delete+re-save the commute, so legacy stored config has `directionCode=null` and falls back to headsign path (which still returns Motalavägen); (b) user did re-save and SL Transport returned `directionCode=0` — meaning bus 57 from this stop heading "→ Sofia" IS the same physical direction whose GTFS final stop is Motalavägen, just labelled differently. In case (b) the fix is working correctly. Can't distinguish from current logs because they don't expose `config.directionCode`. Added `directionCode` to the LivePositionTracker Log.d output so the next run shows whether the field is populated and what its value is. Asked user to delete the existing line 57 commute via the Commutes button and re-save it through the bottom sheet, then paste the new Logcat. Build clean.
+- **Agreement:** Pending re-test.
+- **Plan revised after:** No.
+- **User feedback:** *(pending)*
+- **Satisfaction:** Manual test outcome: **inconclusive** — fix code-correct (build clean, no errors) but runtime impact ambiguous due to insufficient diagnostic logging. Need one more iteration with enhanced log to confirm.
+
+---
+
 *New entries appended below as the project progresses.*

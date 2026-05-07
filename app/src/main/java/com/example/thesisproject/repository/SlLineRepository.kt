@@ -111,22 +111,43 @@ class SlLineRepository(private val context: Context) {
 
     private fun matchDirection(entry: SlLineEntry, config: CommuteConfig): SlDirection? {
         if (entry.directions.isEmpty()) return null
-        // 1) direction_id match — deterministic when SL Transport gave us
-        // direction_code at save time. Bypasses any string-label mismatch
-        // between SL Transport (e.g. "Sofia") and GTFS (e.g. "Motalavägen").
-        // SL Transport uses 1-based direction codes (1, 2) while GTFS uses
-        // 0-based direction_id (0, 1). Try as-is first (covers GTFS-aligned
-        // systems), then try code-1 (covers SL's 1-based convention).
+        val configDirection = config.direction
+
+        // 1) Stop-sequence-aware match. Trafiklab support explicitly says SL
+        //    Transport `direction_code` (0/1/2) does NOT map to GTFS
+        //    `direction_id` (0/1) and recommends matching via stop sequence
+        //    instead. User picked stop X with direction label "Sofia" — find
+        //    the GTFS direction where some stop named "Sofia" appears AFTER X
+        //    in the stop ordering. That direction is unambiguously the one
+        //    the user wants regardless of how SL or GTFS labels directions.
+        //    Falls back through if stopName is missing (legacy save) or no
+        //    direction has both stops in the right order.
+        config.stopName?.takeIf { it.isNotBlank() }?.let { stopName ->
+            entry.directions.forEach { dir ->
+                val stopIndex = dir.stops.indexOfFirst { matchesByName(it.name, stopName) }
+                if (stopIndex < 0) return@forEach
+                val sofiaIsLater = dir.stops.asSequence()
+                    .drop(stopIndex + 1)
+                    .any { matchesByName(it.name, configDirection) }
+                if (sofiaIsLater) return dir
+            }
+        }
+
+        // 2) direction_code heuristic. SL uses 1-based (1/2 normal, 0 unknown);
+        //    GTFS uses 0-based (0/1). Not documented as equivalent — Trafiklab
+        //    explicitly says they don't share IDs — but for two-direction
+        //    routes the `code - 1` mapping happens to work in practice. Keep
+        //    as fallback for legacy saves without `stopName`.
         config.directionCode?.let { code ->
             entry.directions.firstOrNull { it.directionId == code }?.let { return it }
             if (code > 0) {
                 entry.directions.firstOrNull { it.directionId == code - 1 }?.let { return it }
             }
         }
-        // 2) Headsign matching — exact, then contains-either-way. Works for
-        // most lines once BUG-005's blank-headsign fallback has populated
-        // direction.headsign with the trip's final-stop name.
-        val configDirection = config.direction
+
+        // 3) Headsign matching — exact, then contains-either-way. Works for
+        //    many lines after BUG-005's blank-headsign fallback populated
+        //    direction.headsign with the trip's final-stop name.
         entry.directions.firstOrNull { it.headsign.equals(configDirection, ignoreCase = true) }
             ?.let { return it }
         entry.directions.firstOrNull {
@@ -136,6 +157,13 @@ class SlLineRepository(private val context: Context) {
             it.headsign.isNotBlank() && configDirection.contains(it.headsign, ignoreCase = true)
         }?.let { return it }
         return null
+    }
+
+    private fun matchesByName(a: String, b: String): Boolean {
+        if (a.isBlank() || b.isBlank()) return false
+        return a.equals(b, ignoreCase = true) ||
+            a.contains(b, ignoreCase = true) ||
+            b.contains(a, ignoreCase = true)
     }
 
     /**

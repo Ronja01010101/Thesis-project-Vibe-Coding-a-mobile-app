@@ -18,11 +18,17 @@ data class CommuteConfig(
     /** SL transport mode (BUS, METRO, TRAIN, TRAM, SHIP). Nullable for the same reason. */
     val transportMode: String? = null,
     /**
-     * GTFS direction_id (0 or 1) as exposed by SL Transport API. When set,
-     * preferred over headsign-string matching for picking the right direction
-     * within a line — deterministic and immune to SL Transport's direction
-     * labels diverging from GTFS final-stop names (BUG-009). Nullable for
-     * configs saved before Step 5's BUG-009 fix.
+     * SL Transport API's `direction_code` (0/1/2 per their OpenAPI spec — 0 is
+     * "unidentified", 1 and 2 are the two normal directions). NOT the same as
+     * GTFS `direction_id` (0/1) — Trafiklab confirms the two systems don't
+     * share IDs. Used as a heuristic fallback in direction matching.
      */
-    val directionCode: Int? = null
+    val directionCode: Int? = null,
+    /**
+     * Name of the stop the user picked (e.g. "Sofia kyrka", "Slussen"). Stored
+     * because SL Transport's `site.id` and GTFS's `stop_id` use different
+     * schemas, so name-based matching is more reliable for stop-sequence-aware
+     * direction lookup. Nullable for configs saved before this field was added.
+     */
+    val stopName: String? = null
 )

@@ -919,4 +919,26 @@
 
 ---
 
+### Entry 071
+- **Date:** 2026-05-07
+- **Prompt summary:** User pasted Logcat after the v2 fix (code-1 heuristic) and pushed back: "I have linked the documentation for the API several times, and the documentation should contain what we can expect from the calls right? can you really not see anything about this in the documentation? https://www.trafiklab.se/api/our-apis/sl/transport/#/default/StopPoints". They were right to push — I had been making heuristic guesses instead of consulting the docs.
+- **My response summary:** Loaded WebFetch, ran a research agent against the Trafiklab docs + OpenAPI spec + GitHub repos. Found the authoritative `lineDirectionCode` schema in the OpenAPI: `minimum: 0, maximum: 2, description: "The direction code, 1 or 2 back & forth directions and 0 for unidentified direction"`. Critically: a Trafiklab support thread states explicitly that the SL Transport and GTFS Realtime systems "don't share IDs" and recommends reconciling via **trip_id and stop_times**, not direction. My `code-1` heuristic happens to work for two-direction routes but is NOT documentation-backed and could break. Reported findings + showed the actual log result from the v2 fix: `direction_id=1 headsign='Tengdahlsgatan' (config: directionCode=2, direction='Sofia'), tripIds=288` — the heuristic flipped the direction, but whether Tengdahlsgatan-bound is the user's intended direction depends on whether Sofia is intermediate on that route, which we can't determine from logs alone. Surfaced two paths via AskUserQuestion: (a) implement the Trafiklab-recommended stop-sequence-aware matching as primary path, or (b) keep the heuristic and document the limitation.
+- **Agreement:** User picked option (a) — stop-sequence-aware matching.
+- **Plan revised after:** Yes — direction-matching strategy revised again, this time documentation-aligned.
+- **User feedback:** *(pending)*
+- **Satisfaction:** Manual test outcome (of v2 fix): the `code-1` heuristic produced a different match (direction_id=0 → 1) but isn't principled. **Worth documenting in the thesis: pushing back on Claude's heuristic and demanding documentation evidence is a load-bearing user behaviour. The docs ARE clear once consulted, and Trafiklab's own staff explicitly say not to do what we were doing.**
+
+---
+
+### Entry 072
+- **Date:** 2026-05-07
+- **Prompt summary:** User picked stop-sequence-aware matching via AskUserQuestion.
+- **My response summary:** Implemented v3 of the BUG-009 fix. (1) Added `stopName: String? = null` to `CommuteConfig` because the user's chosen stop ID (SL Transport `site.id`) and GTFS's `stop_id` use different schemas — name-based matching is more reliable. (2) Updated `StopConfigBottomSheet` to save `stopName` (already passed as a fragment arg, just was being thrown away). (3) Rewrote `SlLineRepository.matchDirection` priority: (i) **stop-sequence-aware** — find the direction where `config.direction` matches some stop AFTER `config.stopName` in the ordered stops list (Trafiklab's documented recommendation), (ii) `directionCode` heuristic kept as fallback for legacy saves without stopName, (iii) headsign matching kept as further fallback, (iv) first-direction final fallback. Added `matchesByName` helper for fuzzy name matching (equal / contains / reverse-contains). Build clean. BUGS.md: BUG-009 status updated with the full three-version fix history. **Re-save required** to populate `stopName` — existing legacy commutes won't benefit until re-saved through the bottom sheet.
+- **Agreement:** Implementation complete.
+- **Plan revised after:** Yes — BUG-009 fix is now documentation-aligned (the previous two iterations were heuristic).
+- **User feedback:** *(pending)*
+- **Satisfaction:** Manual test outcome: build clean on first try; runtime confirmation pending after the user deletes + re-saves the line 57 commute. The same bus-57 → Sofia commute should match the same direction (whichever has Sofia after the user's stop) regardless of whether SL or GTFS conventions ever change.
+
+---
+
 *New entries appended below as the project progresses.*

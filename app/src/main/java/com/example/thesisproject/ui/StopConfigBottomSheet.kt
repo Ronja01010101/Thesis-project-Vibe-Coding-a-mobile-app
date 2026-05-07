@@ -106,7 +106,8 @@ class StopConfigBottomSheet : BottomSheetDialogFragment() {
                 timeWindowEnd = end,
                 lineDesignation = option.line.name,
                 transportMode = option.line.transportMode,
-                directionCode = option.directionCode
+                directionCode = option.directionCode,
+                stopName = stopName
             )
             if (!start.isBefore(end)) {
                 showError(errorView, "End time must be after start time")

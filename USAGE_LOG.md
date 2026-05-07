@@ -1033,4 +1033,26 @@
 
 ---
 
+### Entry 078
+- **Date:** 2026-05-07
+- **Prompt summary:** User pasted the `/cost` screenshot for the Step 6 session: $11.09 / 1h 27m 40s wall / 19m 34s API / +313 -24 lines / 23% session-window / 12% weekly / 74% at >150k context / 92% subagent-heavy (general-purpose 4%) — fulfilling the CLAUDE.md step-transition `/cost` snapshot rule.
+- **My response summary:** Added Checkpoint 5 to USAGE_LOG.md's Token Checkpoints section with full numbers, model breakdown, limit-usage at snapshot, and three thesis-relevant observations — most notably that Step 6's $11.09 is ~36% of Step 5's $30.90 because the scaffolding (tracker, state machine, palette pattern, polyline cache, lifecycle hooks) was already in place from Step 5; cost compresses sub-linearly across a well-architected step sequence. Also: the "ship → user-runtime-tests → bundle UX issues" loop costs less than designing-up-front against speculative UX issues. Updated the header reference at the top of USAGE_LOG to point to Checkpoint 5 as latest. Updated REQUIREMENTS.md Step 6 row to **Done (runtime tested 2026-05-07)** with full notes covering the polish bundle and 4-bug fix list. Added a wrap-up row to PLAN.md change log covering the polish-bundle runtime confirmation on a different commute (line 57 → Hjorthagen from Mjärdgränd) plus the cost snapshot + cumulative-day total ($65.31 over 5 sessions, ~6h 53m wall). Committed planning-file updates as `c678577`. Fast-forward-merged `step-6-live-vehicles-on-map` into local `main` (4 commits incorporated: `9d70326` core, `874239a` polish, `93adedd` runtime confirmation, `c678577` planning files). `main` is now ahead of `origin/main` by 4 commits — held the push pending user authorisation per the "shared-state actions" rule in CLAUDE.md.
+- **Agreement:** Step 6 closed locally; push pending.
+- **Plan revised after:** Yes — REQUIREMENTS Step 6 → Done, PLAN.md row added, Checkpoint 5 logged, header reference bumped, BUGS.md status changes already committed in earlier turn.
+- **User feedback:** *(pending — user about to authorise push and advise on session continuation)*
+- **Satisfaction:** Step 6 closeout clean. No surprises in the snapshot. Sub-linear cost trajectory across Steps 5→6 noted as a thesis observation.
+
+---
+
+### Entry 079
+- **Date:** 2026-05-07
+- **Prompt summary:** "you can push and merge to main, and make sure to always update the log ofcourse. If you think this conversation is tanking the result, advice me to start fresh but othervise we can continue here" — user authorised the push to `origin/main` and asked me to weigh whether the current conversation context is degrading output quality enough to warrant a `/clear` before Step 7.
+- **My response summary:** Recommended **starting fresh** for Step 7. Reasoning: the /cost snapshot at end of Step 6 already showed 74% of usage at >150k context, and we've added more turns since (runtime-test analysis, checkpoint wrap-up, this exchange) so we're now well past 200k tokens of conversation. Step 7 (P1-FR8, P1-FR9, DS.Req.6) is the SL Deviations API integration — a different endpoint, different data model (deviation/disruption JSON instead of GTFS-RT protobuf), different validation logic (DS.Req.6 says we must validate that a disruption applies to selected line/stop/direction/journey before showing). Almost no technical state from Step 6 carries over: no shared parsing, no shared rendering, no shared data flow. The conversation context is mostly dead weight for Step 7's needs, and the planning files (PLAN, REQUIREMENTS, BUGS, USAGE_LOG) carry forward all the load-bearing context a fresh session needs to bootstrap correctly. Pushing `main` now (4 commits ahead of `origin/main`: `9d70326`, `874239a`, `93adedd`, `c678577`) per user authorisation. About to commit this entry + entry 078 + push.
+- **Agreement:** Push authorised. Start-fresh recommendation surfaced for the user to act on.
+- **Plan revised after:** No code changes; planning-files only — entries 078 + 079 logged, push to origin/main about to happen.
+- **User feedback:** *(in-progress — entry 079 IS this prompt's response)*
+- **Satisfaction:** —
+
+---
+
 *New entries appended below as the project progresses.*

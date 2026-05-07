@@ -21,6 +21,7 @@ buildscript {
     dependencies {
         classpath("com.google.code.gson:gson:2.11.0")
         classpath("org.apache.commons:commons-csv:1.11.0")
+        classpath("org.mobilitydata:gtfs-realtime-bindings:0.0.8")
     }
 }
 
@@ -347,5 +348,96 @@ tasks.register("extractGtfs") {
         }
         logger.lifecycle("Wrote ${lines.size} lines to ${outFile.absolutePath} " +
             "(${outFile.length() / 1024} KB)")
+    }
+}
+
+// =====================================================================
+// Step 5: GTFS Realtime smoke test
+//
+// Run on a developer machine: ./gradlew smokeTestRealtime
+// One-shot fetch of the SL VehiclePositions feed. Confirms the API key
+// is wired to the right Trafiklab product, parses the protobuf, and
+// reports population stats for trip.route_id / trip_id / direction_id.
+// The empirical population rates decide whether we filter live vehicles
+// by route_id directly or need a trip_id -> (route_id, direction_id)
+// lookup baked into the static asset.
+// =====================================================================
+
+tasks.register("smokeTestRealtime") {
+    group = "build setup"
+    description = "Smoke-test the SL GTFS Realtime VehiclePositions endpoint."
+
+    doLast {
+        val key = (localProperties["GTFS_REALTIME_KEY"] as? String).orEmpty()
+        check(key.isNotBlank()) { "GTFS_REALTIME_KEY missing in local.properties" }
+
+        val url = URI.create("https://opendata.samtrafiken.se/gtfs-rt/sl/VehiclePositions.pb?key=$key").toURL()
+        val connection = url.openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.setRequestProperty("Accept", "application/octet-stream, */*")
+        connection.setRequestProperty("Accept-Encoding", "gzip, deflate")
+        connection.setRequestProperty("User-Agent", "thesis-project-android-smokeTestRealtime/1.0")
+        connection.connectTimeout = 30_000
+        connection.readTimeout = 60_000
+
+        try {
+            val code = connection.responseCode
+            val contentType = connection.contentType
+            val contentLength = connection.contentLength
+            val contentEncoding = connection.contentEncoding
+
+            logger.lifecycle("HTTP $code  Content-Type=$contentType  Content-Length=$contentLength  Content-Encoding=$contentEncoding")
+
+            if (code != 200) {
+                val errorBody = connection.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }
+                logger.lifecycle("Body: ${errorBody?.take(500) ?: "(empty)"}")
+                error("Realtime API returned HTTP $code (key length=${key.length}). See body above.")
+            }
+
+            val raw = connection.inputStream
+            val decoded = when (contentEncoding) {
+                "gzip" -> GZIPInputStream(raw)
+                "deflate" -> InflaterInputStream(raw)
+                else -> raw
+            }
+            val bytes = decoded.use { it.readBytes() }
+            logger.lifecycle("Decoded body: ${bytes.size} bytes")
+
+            val feed = com.google.transit.realtime.GtfsRealtime.FeedMessage.parseFrom(bytes)
+            val header = feed.header
+            logger.lifecycle("Feed version: ${header.gtfsRealtimeVersion}")
+            logger.lifecycle("Feed timestamp: ${header.timestamp} (${Instant.ofEpochSecond(header.timestamp)})")
+            logger.lifecycle("Entity count: ${feed.entityCount}")
+
+            val total = feed.entityCount
+            val withVehicle = feed.entityList.count { it.hasVehicle() }
+            val withPosition = feed.entityList.count { it.hasVehicle() && it.vehicle.hasPosition() }
+            val withTrip = feed.entityList.count { it.hasVehicle() && it.vehicle.hasTrip() }
+            val withRouteId = feed.entityList.count { it.hasVehicle() && it.vehicle.hasTrip() && it.vehicle.trip.hasRouteId() }
+            val withTripId = feed.entityList.count { it.hasVehicle() && it.vehicle.hasTrip() && it.vehicle.trip.hasTripId() }
+            val withDirectionId = feed.entityList.count { it.hasVehicle() && it.vehicle.hasTrip() && it.vehicle.trip.hasDirectionId() }
+            val withTimestamp = feed.entityList.count { it.hasVehicle() && it.vehicle.timestamp != 0L }
+
+            logger.lifecycle("--- Population stats (out of $total entities) ---")
+            logger.lifecycle("vehicle present:        $withVehicle")
+            logger.lifecycle("vehicle.position:       $withPosition")
+            logger.lifecycle("vehicle.trip:           $withTrip")
+            logger.lifecycle("vehicle.trip.route_id:  $withRouteId")
+            logger.lifecycle("vehicle.trip.trip_id:   $withTripId")
+            logger.lifecycle("vehicle.trip.direction: $withDirectionId")
+            logger.lifecycle("vehicle.timestamp:      $withTimestamp")
+
+            feed.entityList.firstOrNull { it.hasVehicle() && it.vehicle.hasPosition() }?.let { e ->
+                val v = e.vehicle
+                val routeId = if (v.trip.hasRouteId()) v.trip.routeId else "(absent)"
+                val directionId = if (v.trip.hasDirectionId()) v.trip.directionId.toString() else "(absent)"
+                val tripId = if (v.trip.hasTripId()) v.trip.tripId else "(absent)"
+                logger.lifecycle("--- Sample entity ---")
+                logger.lifecycle("  id=${e.id}  route_id=$routeId  direction_id=$directionId  trip_id=$tripId")
+                logger.lifecycle("  lat=${v.position.latitude}  lon=${v.position.longitude}  ts=${v.timestamp}")
+            }
+        } finally {
+            connection.disconnect()
+        }
     }
 }

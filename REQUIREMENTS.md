@@ -91,7 +91,7 @@
 | NFR7 | Modular structure — live-data, map, user settings, disruption, and notification functions developed and tested separately |
 | NFR8 | Limit rendered map markers to the current viewport (with a hard cap on count) so the app stays responsive on low-spec hardware and emulators |
 | NFR9 | Map tile provider must comply with the OpenStreetMap Foundation's tile usage policy. Default `tile.openstreetmap.org` (used by `TileSourceFactory.MAPNIK`) is for development only — switch to a third-party provider (CartoDB / MapTiler / Mapbox / similar) before any wider distribution. The OSM policy is volume-based, not commercial-status-based, so this applies even to free / non-commercial distribution. |
-| NFR10 | Live-data polling cadence must respect Trafiklab API quotas. On the Bronze tier (50 calls/min, 30 000/month for GTFS Realtime), poll at 10–15 second intervals during the active commute window — not faster. |
+| NFR10 | Live-data polling cadence must respect Trafiklab API quotas. On the Bronze tier (50 calls/min, 30 000/month for GTFS Realtime), poll at **20-second baseline intervals** during the active commute window. May dial down to 10–15 seconds later if quota and UX both allow. Polling must be gated to (active-commute window) AND (app foregrounded OR widget-tracking active in Step 8) — never run continuously. |
 
 ---
 

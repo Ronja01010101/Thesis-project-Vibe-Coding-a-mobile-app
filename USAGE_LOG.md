@@ -22,7 +22,7 @@
 | Avg satisfaction | — |
 | Sessions | 5 |
 | Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction |
-| Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 ($5.10) |
+| Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 Checkpoint 2 ($8.61, post-Step 4a) |
 
 ---
 
@@ -30,7 +30,7 @@
 
 > Snapshots taken with the `/cost` slash command. Useful for thesis token-spend analysis.
 
-### Checkpoint 1 — Session 5 mid-session (2026-05-07)
+### Checkpoint 1 — Session 5 mid-session (2026-05-07, ~3pm)
 - **Cost:** $5.10
 - **Wall time:** 48m 51s · **API time:** 18m 35s
 - **Code changes:** +134 / −15 lines (all planning files — no app code yet)
@@ -38,6 +38,18 @@
   - `claude-opus-4-7` — 3.9k input · 59.8k output · 4.8M cache read · 176.8k cache write — **$5.01**
   - `claude-haiku-4-5` — 64.9k input · 2.5k output · 1 web search — **$0.09**
 - **Notes:** Snapshot taken before starting Step 4a. Costs reflect a research-and-redesign session: two subagent runs for Trafiklab GTFS research + reference-project review (one Bun crash mid-fetch — no cost incurred for the failed run). Most spend was Opus cache writes for the long, multi-turn research / design / logging context. The session was unusually decision-heavy (Step 4 design reversal documented in Entries 041–046) and unusually documentation-heavy (logging the reversal in detail per the user's request for thesis traceability) — meaning $5.10 reflects deliberation + recordkeeping more than typical implementation work.
+
+### Checkpoint 2 — Session 5 post-Step-4a (2026-05-07, ~3:35pm)
+- **Cost:** $8.61 (this is a fresh local session, not cumulative — user restarted Claude Code between checkpoints due to a `/cost` dialog escape-key bug, so the Session counter started over. Same calendar session in our project tracking.)
+- **Wall time:** 32m 56s · **API time:** 19m 25s
+- **Code changes:** +371 / −40 lines (Step 4a implementation: extractGtfs Gradle task + bundled `sl-lines.json` asset)
+- **Model usage:**
+  - `claude-opus-4-7` — 4.9k input · 74.2k output · 9.8M cache read · 261.2k cache write — **$8.39**
+  - `claude-haiku-4-5` — 115.9k input · 4.4k output · 16.4k cache read · 10.1k cache write · 7 web searches — **$0.22**
+- **Limit usage at snapshot:** 22% of current 5h session window, 5% of weekly limit (all models).
+- **Notes:** Implementation session. Higher per-minute cost than Checkpoint 1 ($8.61 / 33m ≈ $0.26/min vs $5.10 / 49m ≈ $0.10/min) — implementation work is roughly **2.5× more expensive per minute** than design/research because of the heavier tool-use cycle (file reads → edits → builds → re-reads), driving up Opus cache writes (177k → 261k). 51% of usage was at >150k context (up from 40% — context grew through the four debug iterations of Step 4a). One agent crash earlier (Bun segfault during a research fetch) was not billed; otherwise no waste.
+
+**Cumulative for the day so far:** $5.10 + $8.61 = $13.71 across two local sessions, all in 2026-05-07.
 
 ---
 

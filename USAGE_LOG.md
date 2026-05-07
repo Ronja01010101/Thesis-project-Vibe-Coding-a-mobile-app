@@ -1004,4 +1004,15 @@
 
 ---
 
+### Entry 077
+- **Date:** 2026-05-07
+- **Prompt summary:** "it works as expected i think?" + Logcat from a 7-minute run of the polish-bundle build. User tested a *different* commute than before (line 57 → Hjorthagen from stop 'Mjärdgränd' with `directionCode=1`, whereas the earlier Step 5 / Step 6 tests used line 57 → Sofia from Tullgårdsparken with `directionCode=2`).
+- **My response summary:** Parsed the Logcat: matchDirection picked `direction_id=0 headsign='Motalavägen'` with 281 tripIds for the new "→ Hjorthagen" commute — correct, because Motalavägen is the terminus in/near Hjorthagen, the opposite end of the route from Tengdahlsgatan that the previous test exercised. So bus 57 now has both directions confirmed working through the stop-sequence-aware matcher (different stopName / different directionCode / different direction string / different headsign / different tripIds → all hit the right answer). 17 polling cycles over ~7 minutes, 2 vehicles tracked consistently, no `Realtime fetch failed`, heap stable 6–15 MB, no surprise crashes. The user's terse "works as expected" is sufficient confirmation that the four UI polish fixes (small stop dots / zoom threshold / always-visible custom zoom buttons / map-tap closes InfoWindow) are functioning visually — Logcat couldn't tell us that directly. Marked BUG-002, BUG-003, BUG-010, BUG-011 as **"Fixed 2026-05-07 (runtime confirmed)"** in BUGS.md (status row only — fix descriptions kept). About to ask the user to run `/cost` for the Step 6 snapshot, then mark Step 6 Done in REQUIREMENTS.md and merge to main per the CLAUDE.md step-transition rule.
+- **Agreement:** Yes — Step 6 (P1-FR5) is functionally complete and visually confirmed.
+- **Plan revised after:** Yes — four bug status rows updated to "Fixed 2026-05-07 (runtime confirmed)". Step 6 ready for `/cost` snapshot + REQUIREMENTS.md Done transition.
+- **User feedback:** "works as expected".
+- **Satisfaction:** Manual test outcome: **worked first time after the polish bundle was shipped** (Step 6 core was already working from entry 076; the polish bundle fixed the four UI rough edges in one commit, runtime-confirmed in this entry). Across Step 6 as a whole: 2 commits on branch (`9d70326` core, `874239a` polish bundle), 0 build-time iterations, 1 runtime-test iteration to surface UI issues + 1 to confirm fixes. Cumulative bug count: 12 entries in BUGS.md, of which 9 are now Fixed (BUG-001 still open as Low; BUG-007 deferred feature; BUG-008 deferred polyline overlap; BUG-012 deferred uncertain-threshold). Multi-commute / multi-direction tracking is now robustly confirmed with two distinct commutes on the same line.
+
+---
+
 *New entries appended below as the project progresses.*

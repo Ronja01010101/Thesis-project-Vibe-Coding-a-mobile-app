@@ -1,5 +1,6 @@
 package com.example.thesisproject.tracking
 
+import android.util.Log
 import com.example.thesisproject.model.CommuteConfig
 import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.GtfsRealtimeRepository
@@ -77,7 +78,8 @@ class LivePositionTracker(
             _state.value = TrackingState.Error("Could not match commute (line $designation) to catalog.")
             return
         }
-        val direction = pair.second
+        val (line, direction) = pair
+        Log.d(TAG, "matched designation=$designation routeId=${line.routeId} routeType=${line.routeType} -> direction.headsign='${direction.headsign}' (config wanted '${active.direction}'), tripIds=${direction.tripIds.size}")
         if (direction.tripIds.isEmpty()) {
             _state.value = TrackingState.Error("No trip_ids for line $designation toward ${direction.headsign}.")
             return
@@ -89,12 +91,14 @@ class LivePositionTracker(
                 lineDesignation = designation,
                 direction = direction.headsign
             )
+            Log.d(TAG, "fetched ${vehicles.size} vehicles matching ${direction.tripIds.size} tripIds for line=$designation dir=${direction.headsign}")
             _state.value = TrackingState.Polling(
                 activeCommute = active,
                 vehicles = vehicles,
                 lastUpdateMs = System.currentTimeMillis()
             )
         } catch (e: Exception) {
+            Log.w(TAG, "Realtime fetch failed", e)
             _state.value = TrackingState.Error("Realtime fetch failed: ${e.message ?: e.javaClass.simpleName}")
         }
     }
@@ -111,6 +115,7 @@ class LivePositionTracker(
     }
 
     companion object {
+        private const val TAG = "LiveTracking"
         // 20s baseline polling per NFR10. With Bronze quota of 30k/month, this
         // covers ~165 minutes of active polling per day comfortably.
         const val DEFAULT_POLL_INTERVAL_MS = 20_000L

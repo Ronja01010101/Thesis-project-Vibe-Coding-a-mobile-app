@@ -33,6 +33,8 @@ import com.example.thesisproject.ui.StopAdapter
 import com.example.thesisproject.ui.StopConfigBottomSheet
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
@@ -81,6 +83,8 @@ class MainActivity : AppCompatActivity() {
         )
     }
     private lateinit var liveStatusView: TextView
+    private var lastTrackingState: TrackingState = TrackingState.Idle
+    private var ageTickerJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -148,6 +152,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderTrackingState(state: TrackingState) {
+        lastTrackingState = state
         liveStatusView.text = when (state) {
             is TrackingState.Idle ->
                 "Live tracker idle"
@@ -335,12 +340,26 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         map.onResume()
         livePositionTracker.start(lifecycleScope)
+        // 1-second ticker re-renders the "updated Xs ago" line so the user
+        // can see the counter incrementing between polls. The tracker itself
+        // only emits a new state every 20s, so without this the text would
+        // look frozen even when polling is firing normally.
+        ageTickerJob = lifecycleScope.launch {
+            while (isActive) {
+                delay(1_000L)
+                if (lastTrackingState is TrackingState.Polling) {
+                    renderTrackingState(lastTrackingState)
+                }
+            }
+        }
     }
 
     override fun onPause() {
         super.onPause()
         map.onPause()
         livePositionTracker.stop()
+        ageTickerJob?.cancel()
+        ageTickerJob = null
     }
 
     override fun onDestroy() {

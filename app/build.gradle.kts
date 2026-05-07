@@ -1,4 +1,5 @@
 import com.google.gson.GsonBuilder
+import com.google.gson.stream.JsonReader
 import org.apache.commons.csv.CSVFormat
 import java.io.BufferedInputStream
 import java.io.BufferedReader
@@ -452,6 +453,103 @@ tasks.register("smokeTestRealtime") {
                 logger.lifecycle("--- Sample entity ---")
                 logger.lifecycle("  id=${e.id}  route_id=$routeId  direction_id=$directionId  trip_id=$tripId")
                 logger.lifecycle("  lat=${v.position.latitude}  lon=${v.position.longitude}  ts=${v.timestamp}")
+            }
+
+            // Cross-check live trip_ids against the static asset. Tells us
+            // whether the realtime feed uses the same trip_id format as the
+            // bundled static catalog — answers "do our filters even have a
+            // chance of matching anything?".
+            val assetFile = project.layout.projectDirectory.file("src/main/assets/sl-lines.json").asFile
+            if (!assetFile.exists()) {
+                logger.lifecycle("--- Asset cross-check skipped: ${assetFile.path} not found ---")
+            } else {
+                logger.lifecycle("--- Asset cross-check (sl-lines.json -> live feed) ---")
+                val staticTripIds = HashSet<String>(200_000)
+                val staticTripIdsByLine = mutableMapOf<String, HashSet<String>>()
+                JsonReader(
+                    InputStreamReader(assetFile.inputStream(), StandardCharsets.UTF_8)
+                ).use { reader ->
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        when (reader.nextName()) {
+                            "lines" -> {
+                                reader.beginArray()
+                                while (reader.hasNext()) {
+                                    var lineDesignation = ""
+                                    val lineTripIds = HashSet<String>()
+                                    reader.beginObject()
+                                    while (reader.hasNext()) {
+                                        when (reader.nextName()) {
+                                            "lineDesignation" -> lineDesignation = reader.nextString()
+                                            "directions" -> {
+                                                reader.beginArray()
+                                                while (reader.hasNext()) {
+                                                    reader.beginObject()
+                                                    while (reader.hasNext()) {
+                                                        when (reader.nextName()) {
+                                                            "tripIds" -> {
+                                                                reader.beginArray()
+                                                                while (reader.hasNext()) {
+                                                                    val t = reader.nextString()
+                                                                    staticTripIds.add(t)
+                                                                    lineTripIds.add(t)
+                                                                }
+                                                                reader.endArray()
+                                                            }
+                                                            else -> reader.skipValue()
+                                                        }
+                                                    }
+                                                    reader.endObject()
+                                                }
+                                                reader.endArray()
+                                            }
+                                            else -> reader.skipValue()
+                                        }
+                                    }
+                                    reader.endObject()
+                                    if (lineDesignation.isNotBlank()) {
+                                        staticTripIdsByLine.merge(lineDesignation, lineTripIds) { a, b ->
+                                            a.also { it.addAll(b) }
+                                        }
+                                    }
+                                }
+                                reader.endArray()
+                            }
+                            else -> reader.skipValue()
+                        }
+                    }
+                    reader.endObject()
+                }
+                logger.lifecycle("Asset trip_ids: ${staticTripIds.size} unique across ${staticTripIdsByLine.size} designations")
+
+                val liveTripIds = feed.entityList
+                    .filter { it.hasVehicle() && it.vehicle.hasTrip() && it.vehicle.trip.hasTripId() }
+                    .map { it.vehicle.trip.tripId }
+                val matchedCount = liveTripIds.count { it in staticTripIds }
+                val missingTripIds = liveTripIds.filter { it !in staticTripIds }
+
+                logger.lifecycle("Live trip_ids: ${liveTripIds.size} (${liveTripIds.toSet().size} unique)")
+                logger.lifecycle("Live trip_ids present in asset: $matchedCount / ${liveTripIds.size} (${if (liveTripIds.isEmpty()) "n/a" else "${100 * matchedCount / liveTripIds.size}%"})")
+                if (missingTripIds.isNotEmpty()) {
+                    logger.lifecycle("Sample of MISSING live trip_ids (not in asset):")
+                    missingTripIds.take(5).forEach { logger.lifecycle("  $it") }
+                }
+                logger.lifecycle("Sample of present-in-asset live trip_ids:")
+                liveTripIds.firstOrNull { it in staticTripIds }?.let { logger.lifecycle("  $it") }
+
+                // Per-line breakdown for line "17" specifically (user's failing case).
+                val line17 = staticTripIdsByLine["17"]
+                if (line17 != null) {
+                    val live17 = liveTripIds.filter { it in line17 }
+                    logger.lifecycle("Line '17' static asset has ${line17.size} trip_ids; $live17.size of currently-live trips match.")
+                    logger.lifecycle("Line '17' live matches: ${live17.size}")
+                } else {
+                    logger.lifecycle("Line '17' not present in asset (designation lookup miss).")
+                }
+                logger.lifecycle("Designations with most static trip_ids:")
+                staticTripIdsByLine.entries.sortedByDescending { it.value.size }.take(10).forEach { (k, v) ->
+                    logger.lifecycle("  $k -> ${v.size} trip_ids")
+                }
             }
         } finally {
             connection.disconnect()

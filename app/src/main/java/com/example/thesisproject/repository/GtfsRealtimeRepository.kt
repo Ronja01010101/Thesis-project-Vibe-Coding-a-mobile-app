@@ -1,5 +1,6 @@
 package com.example.thesisproject.repository
 
+import android.util.Log
 import com.example.thesisproject.model.DataQuality
 import com.example.thesisproject.model.VehiclePosition
 import com.google.transit.realtime.GtfsRealtime.FeedMessage
@@ -54,6 +55,12 @@ class GtfsRealtimeRepository(
             val feed = FeedMessage.parseFrom(bytes)
             val nowMs = System.currentTimeMillis()
 
+            val totalLiveTripIds = feed.entityList.count { it.hasVehicle() && it.vehicle.hasTrip() && it.vehicle.trip.hasTripId() }
+            val matchingLiveTripIds = feed.entityList.count {
+                it.hasVehicle() && it.vehicle.hasTrip() && it.vehicle.trip.tripId in tripIds
+            }
+            Log.d(TAG, "fetched feed: ${feed.entityCount} entities, $totalLiveTripIds with trip_id, $matchingLiveTripIds match our ${tripIds.size}-tripId filter (line $lineDesignation, dir $direction)")
+
             feed.entityList.mapNotNull { entity ->
                 if (!entity.hasVehicle()) return@mapNotNull null
                 val v = entity.vehicle
@@ -80,6 +87,7 @@ class GtfsRealtimeRepository(
     }
 
     companion object {
+        private const val TAG = "LiveTracking"
         private const val ENDPOINT = "https://opendata.samtrafiken.se/gtfs-rt/sl/VehiclePositions.pb"
         private const val DATA_SOURCE = "GTFS-RT SL"
         // Position older than 60s is flagged UNCERTAIN. Tunable later when

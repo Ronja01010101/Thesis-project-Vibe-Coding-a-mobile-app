@@ -103,7 +103,9 @@ class StopConfigBottomSheet : BottomSheetDialogFragment() {
                 lineId = option.line.id,
                 direction = option.direction,
                 timeWindowStart = start,
-                timeWindowEnd = end
+                timeWindowEnd = end,
+                lineDesignation = option.line.name,
+                transportMode = option.line.transportMode
             )
             if (!start.isBefore(end)) {
                 showError(errorView, "End time must be after start time")
@@ -115,6 +117,8 @@ class StopConfigBottomSheet : BottomSheetDialogFragment() {
             }
             if (store.add(config)) {
                 Toast.makeText(requireContext(), "Commute saved", Toast.LENGTH_SHORT).show()
+                // Tell the host activity a config was saved so it can redraw overlays.
+                parentFragmentManager.setFragmentResult(RESULT_KEY_COMMUTE_SAVED, Bundle.EMPTY)
                 dismiss()
             } else {
                 showError(errorView, "Could not save — check times")
@@ -156,6 +160,10 @@ class StopConfigBottomSheet : BottomSheetDialogFragment() {
     companion object {
         private const val ARG_STOP_ID = "stop_id"
         private const val ARG_STOP_NAME = "stop_name"
+
+        /** Fragment-result key the host activity should listen to in order to know
+         *  when a new commute has been saved (and the map overlays need to redraw). */
+        const val RESULT_KEY_COMMUTE_SAVED = "commute_saved"
 
         fun newInstance(stopId: String, stopName: String): StopConfigBottomSheet {
             val sheet = StopConfigBottomSheet()

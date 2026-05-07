@@ -1,5 +1,9 @@
 package com.example.thesisproject
 
+import android.graphics.Paint
+import android.graphics.drawable.Drawable
+import android.graphics.drawable.ShapeDrawable
+import android.graphics.drawable.shapes.OvalShape
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -13,14 +17,19 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.thesisproject.model.SlLineCatalog
 import com.example.thesisproject.model.Stop
+import com.example.thesisproject.repository.CommuteConfigStore
+import com.example.thesisproject.repository.SlLineRepository
 import com.example.thesisproject.ui.MapViewModel
 import com.example.thesisproject.ui.StopAdapter
 import com.example.thesisproject.ui.StopConfigBottomSheet
 import com.google.android.material.card.MaterialCardView
+import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
@@ -29,6 +38,8 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.views.overlay.Overlay
+import org.osmdroid.views.overlay.Polyline
 
 class MainActivity : AppCompatActivity() {
 
@@ -47,6 +58,12 @@ class MainActivity : AppCompatActivity() {
 
     private var centerLat = STOCKHOLM_LAT
     private var centerLon = STOCKHOLM_LON
+
+    // Step 4b: saved-commute overlays drawn on top of regular stop markers.
+    private val commuteStore by lazy { CommuteConfigStore(this) }
+    private val lineRepository by lazy { SlLineRepository(this) }
+    private var lineCatalog: SlLineCatalog? = null
+    private val commuteOverlays: MutableList<Overlay> = mutableListOf()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,6 +109,24 @@ class MainActivity : AppCompatActivity() {
             }
         }
         viewModel.loadStops()
+
+        // Listen for the bottom sheet's "commute saved" broadcast so we can
+        // redraw the line overlays as soon as a new commute is configured.
+        supportFragmentManager.setFragmentResultListener(
+            StopConfigBottomSheet.RESULT_KEY_COMMUTE_SAVED,
+            this
+        ) { _, _ -> rebuildCommuteOverlays() }
+
+        // Load the bundled line catalog (sl-lines.json, ~15 MB) off the main
+        // thread, then draw whatever commutes are already saved.
+        lifecycleScope.launch {
+            lineCatalog = try {
+                lineRepository.getCatalog()
+            } catch (e: Exception) {
+                null
+            }
+            rebuildCommuteOverlays()
+        }
     }
 
     private fun setupSearch() {
@@ -175,6 +210,58 @@ class MainActivity : AppCompatActivity() {
         map.invalidate()
     }
 
+    /**
+     * Step 4b: For each saved commute config, find the matching line+direction
+     * in the bundled GTFS catalog and draw its polyline + stop markers.
+     * Called once after the catalog finishes loading and again whenever a new
+     * commute is saved (via the FragmentResultListener).
+     */
+    private fun rebuildCommuteOverlays() {
+        val catalog = lineCatalog ?: return
+        val configs = commuteStore.getAll()
+
+        commuteOverlays.forEach { map.overlays.remove(it) }
+        commuteOverlays.clear()
+
+        configs.forEachIndexed { index, config ->
+            val color = COMMUTE_PALETTE[index % COMMUTE_PALETTE.size]
+            val matched = lineRepository.matchConfig(catalog, config) ?: return@forEachIndexed
+            val (_, direction) = matched
+
+            if (direction.polyline.isNotEmpty()) {
+                val polyline = Polyline()
+                polyline.setPoints(direction.polyline.map { GeoPoint(it[0], it[1]) })
+                polyline.outlinePaint.color = color
+                polyline.outlinePaint.strokeWidth = 12f
+                polyline.outlinePaint.alpha = 180  // semi-transparent so overlapping commutes are visible
+                map.overlays.add(polyline)
+                commuteOverlays.add(polyline)
+            }
+
+            val dotIcon = makeStopDot(color)
+            direction.stops.forEach { stop ->
+                val marker = Marker(map)
+                marker.position = GeoPoint(stop.lat, stop.lon)
+                marker.title = "${config.lineDesignation ?: "?"}: ${stop.name}"
+                marker.icon = dotIcon
+                marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                map.overlays.add(marker)
+                commuteOverlays.add(marker)
+            }
+        }
+        map.invalidate()
+    }
+
+    private fun makeStopDot(color: Int): Drawable {
+        val sizePx = (resources.displayMetrics.density * 12f).toInt()
+        val shape = ShapeDrawable(OvalShape())
+        shape.intrinsicWidth = sizePx
+        shape.intrinsicHeight = sizePx
+        shape.paint.color = color
+        shape.paint.style = Paint.Style.FILL
+        return shape
+    }
+
     private fun openCommuteConfig(stop: Stop) {
         searchInput.setText("")
         resultsCard.visibility = View.GONE
@@ -202,5 +289,15 @@ class MainActivity : AppCompatActivity() {
         private const val STOCKHOLM_LON = 18.0686
         private const val MAX_MARKERS = 400
         private const val REBUILD_DEBOUNCE_MS = 200L
+
+        // Color cycle for commute overlays — distinct + colour-blind friendly enough
+        // that two or three saved commutes are easy to tell apart on a basic map tile.
+        private val COMMUTE_PALETTE = intArrayOf(
+            0xFF1976D2.toInt(),  // blue
+            0xFFE53935.toInt(),  // red
+            0xFF43A047.toInt(),  // green
+            0xFFFB8C00.toInt(),  // orange
+            0xFF8E24AA.toInt()   // purple
+        )
     }
 }

@@ -78,6 +78,7 @@ class GtfsRealtimeRepository(
                     direction = direction,
                     lat = v.position.latitude.toDouble(),
                     lon = v.position.longitude.toDouble(),
+                    bearing = if (v.position.hasBearing()) v.position.bearing else null,
                     timestampMs = tsMs,
                     dataSource = DATA_SOURCE,
                     quality = if (ageMs in 0..STALE_THRESHOLD_MS) DataQuality.LIVE else DataQuality.UNCERTAIN

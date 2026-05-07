@@ -1,6 +1,11 @@
 package com.example.thesisproject
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.ShapeDrawable
 import android.graphics.drawable.shapes.OvalShape
@@ -24,6 +29,8 @@ import androidx.lifecycle.lifecycleScope
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.example.thesisproject.model.CommuteConfig
+import com.example.thesisproject.model.DataQuality
 import com.example.thesisproject.model.Stop
 import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.GtfsRealtimeRepository
@@ -43,6 +50,7 @@ import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
@@ -87,6 +95,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var liveStatusView: TextView
     private var lastTrackingState: TrackingState = TrackingState.Idle
     private var ageTickerJob: Job? = null
+
+    // Step 6: live vehicle markers + auto-fit-camera state.
+    // vehicleMarkers are removed and re-added every state emission (small N — usually
+    // single-digit count of vehicles per active commute, so the churn is negligible).
+    // commutePolylines caches the GeoPoint list per commute index so the auto-fit
+    // bounding box can include the route geometry. lastFittedCommuteKey suppresses
+    // re-fitting on every poll; it resets when tracking leaves Polling.
+    private val vehicleMarkers: MutableList<Marker> = mutableListOf()
+    private val commutePolylines: MutableMap<Int, List<GeoPoint>> = mutableMapOf()
+    private var lastFittedCommuteKey: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -178,7 +196,131 @@ class MainActivity : AppCompatActivity() {
             is TrackingState.Error ->
                 "Live data error: ${state.message}"
         }
+        renderVehicles(state)
+        maybeAutoFit(state)
     }
+
+    /**
+     * Step 6: draw a marker for every vehicle in the current Polling state.
+     * Markers use the active commute's palette colour. UNCERTAIN positions
+     * (stale > 60 s) render desaturated with a grey outline. When a vehicle
+     * reports a bearing we add a directional notch and rotate the icon.
+     */
+    private fun renderVehicles(state: TrackingState) {
+        vehicleMarkers.forEach { map.overlays.remove(it) }
+        vehicleMarkers.clear()
+        if (state !is TrackingState.Polling) {
+            map.invalidate()
+            return
+        }
+        val configs = commuteStore.getAll()
+        val activeIndex = configs.indexOf(state.activeCommute)
+        val baseColor = if (activeIndex >= 0) {
+            COMMUTE_PALETTE[activeIndex % COMMUTE_PALETTE.size]
+        } else {
+            COMMUTE_PALETTE[0]
+        }
+        state.vehicles.forEach { vehicle ->
+            val isUncertain = vehicle.quality != DataQuality.LIVE
+            val hasBearing = vehicle.bearing != null
+            val marker = Marker(map)
+            marker.position = GeoPoint(vehicle.lat, vehicle.lon)
+            marker.icon = makeVehicleIcon(baseColor, isUncertain, hasBearing)
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+            // OSMDroid's Marker.rotation is counterclockwise. GTFS-RT bearing is
+            // clockwise from north, so we negate to make the icon's notch point
+            // in the actual direction of travel.
+            vehicle.bearing?.let { marker.rotation = -it }
+            marker.title = buildString {
+                append(vehicle.lineId)
+                append(" → ")
+                append(vehicle.direction)
+                if (isUncertain) append(" — uncertain")
+                vehicle.bearing?.let { append(" — bearing ${it.toInt()}°") }
+            }
+            vehicleMarkers.add(marker)
+            map.overlays.add(marker)
+        }
+        map.invalidate()
+    }
+
+    private fun makeVehicleIcon(color: Int, isUncertain: Boolean, hasBearing: Boolean): Drawable {
+        val dpFactor = resources.displayMetrics.density
+        val sizePx = (dpFactor * 26f).toInt()
+        val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        val center = sizePx / 2f
+        val radius = (sizePx / 2f) - (dpFactor * 2f)
+
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = color
+            alpha = if (isUncertain) 110 else 255
+            style = Paint.Style.FILL
+        }
+        canvas.drawCircle(center, center, radius, fillPaint)
+
+        val outlinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            this.color = if (isUncertain) Color.GRAY else Color.WHITE
+            style = Paint.Style.STROKE
+            strokeWidth = dpFactor * if (isUncertain) 1.5f else 2f
+        }
+        canvas.drawCircle(center, center, radius, outlinePaint)
+
+        if (hasBearing) {
+            // Triangular notch fully inside the circle, near the top, pointing up
+            // (= north, before rotation). Rotation is applied by OSMDroid via
+            // marker.rotation so the notch ends up pointing in the direction of travel.
+            val notchPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = if (isUncertain) Color.LTGRAY else Color.WHITE
+                style = Paint.Style.FILL
+            }
+            val notchHalfWidth = radius * 0.45f
+            val tipY = center - radius * 0.6f
+            val baseY = center + radius * 0.05f
+            val path = Path().apply {
+                moveTo(center, tipY)
+                lineTo(center - notchHalfWidth, baseY)
+                lineTo(center + notchHalfWidth, baseY)
+                close()
+            }
+            canvas.drawPath(path, notchPaint)
+        }
+        return BitmapDrawable(resources, bitmap)
+    }
+
+    /**
+     * Pan/zoom the map to include the active commute's polyline + currently-known
+     * vehicle positions. Fires once per active commute session; if the polyline
+     * isn't in the cache yet (rebuildCommuteOverlays is async and may not have
+     * finished), we defer the fit to the next state emission instead of zooming
+     * to vehicles only.
+     */
+    private fun maybeAutoFit(state: TrackingState) {
+        if (state !is TrackingState.Polling) {
+            lastFittedCommuteKey = null
+            return
+        }
+        val key = state.activeCommute.fitKey()
+        if (key == lastFittedCommuteKey) return
+
+        val configs = commuteStore.getAll()
+        val activeIndex = configs.indexOf(state.activeCommute)
+        val polylinePoints = commutePolylines[activeIndex]
+        if (polylinePoints.isNullOrEmpty()) return
+
+        val allPoints = ArrayList<GeoPoint>(polylinePoints.size + state.vehicles.size).apply {
+            addAll(polylinePoints)
+            state.vehicles.forEach { add(GeoPoint(it.lat, it.lon)) }
+        }
+        val box = BoundingBox.fromGeoPoints(allPoints)
+        // Padding in pixels. 80 leaves headroom for the search bar at top and
+        // the live-status overlay at bottom without hiding the route's endpoints.
+        map.zoomToBoundingBox(box, true, 80)
+        lastFittedCommuteKey = key
+    }
+
+    private fun CommuteConfig.fitKey(): String =
+        "$lineDesignation|$direction|$stopName|$timeWindowStart|$timeWindowEnd"
 
     private fun setupSearch() {
         searchInput = findViewById(R.id.search_input)
@@ -278,6 +420,7 @@ class MainActivity : AppCompatActivity() {
         // Always clear first so the map state is consistent immediately.
         commuteOverlays.forEach { map.overlays.remove(it) }
         commuteOverlays.clear()
+        commutePolylines.clear()
         if (designations.isEmpty()) {
             map.invalidate()
             return
@@ -300,8 +443,10 @@ class MainActivity : AppCompatActivity() {
                 val (_, direction) = pair
 
                 if (direction.polyline.isNotEmpty()) {
+                    val points = direction.polyline.map { GeoPoint(it[0], it[1]) }
+                    commutePolylines[index] = points
                     val polyline = Polyline()
-                    polyline.setPoints(direction.polyline.map { GeoPoint(it[0], it[1]) })
+                    polyline.setPoints(points)
                     polyline.outlinePaint.color = color
                     polyline.outlinePaint.strokeWidth = 12f
                     polyline.outlinePaint.alpha = 180

@@ -982,4 +982,15 @@
 
 ---
 
+### Entry 075
+- **Date:** 2026-05-07
+- **Prompt summary:** "lets continue the plan?" — user resumed the project after the Step 5 wrap-up commit (`5d020c2`), expecting to start Step 6.
+- **My response summary:** Read all four planning files at session open per CLAUDE.md (PLAN, REQUIREMENTS, BUGS, last ~10 USAGE_LOG entries). Confirmed Step 5 closed with Checkpoint 4 logged ($30.90), so Step 6 (P1-FR5 / DS.Req.5 / P1-FR10) is next. Surfaced the four design choices to the user via AskUserQuestion (coloured-dot vs other marker styles / bearing rotation yes-no / how to render UNCERTAIN / auto-fit camera on tracking start). User picked **all four**. Read existing relevant code (MainActivity, LivePositionTracker, TrackingState, VehiclePosition, GtfsRealtimeRepository, layout) so I could implement without breaking the Step 5 wiring. Implementation in three small phases: (1) `VehiclePosition` extended with `bearing: Float?`, GtfsRealtimeRepository now reads `v.position.bearing` when `hasBearing()` is true (one line each, no callers broken — only one constructor site). (2) MainActivity gains `vehicleMarkers`, `commutePolylines`, `lastFittedCommuteKey` fields plus a `renderVehicles(state)` and `maybeAutoFit(state)` pair invoked at the end of `renderTrackingState`. Marker icon factory (`makeVehicleIcon`) draws a filled circle in the active commute's palette colour; outline is white (LIVE) or grey (UNCERTAIN); fill alpha drops from 255 to 110 for UNCERTAIN. When bearing is reported the icon also gets a white triangular notch near the top and `marker.rotation = -bearing` (negated because OSMDroid's `rotation` is counterclockwise while GTFS-RT bearing is clockwise from north). Marker title surfaces line/direction/bearing/uncertain status for tap. (3) `rebuildCommuteOverlays` caches the polyline GeoPoints per commute index into `commutePolylines` so the auto-fit can include route geometry. Auto-fit fires once per active-commute session, defers if the polyline cache hasn't populated yet (avoids zooming to a vehicle cluster with no context). Reset on Idle/NoActiveCommute/Error. Build verified clean (`./gradlew assembleDebug` → BUILD SUCCESSFUL). Updated REQUIREMENTS.md (Step 6 row → "Implemented, runtime test pending", branch noted, full notes summary). Updated PLAN.md change log with a Step 6 implementation entry + reasoning column (note: I added the row in the wrong order on first try and had to reorder — the change log goes oldest → newest; trivially fixed). About to commit on `step-6-live-vehicles-on-map` and issue a runtime test plan.
+- **Agreement:** Implementation matches all four user-locked design choices.
+- **Plan revised after:** Yes — REQUIREMENTS.md Step 6 row updated; PLAN.md change log entry added.
+- **User feedback:** *(pending — runtime test next)*
+- **Satisfaction:** Build clean on first try (no debug iterations). Runtime test outcome pending.
+
+---
+
 *New entries appended below as the project progresses.*

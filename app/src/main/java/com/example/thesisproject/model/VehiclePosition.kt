@@ -13,6 +13,7 @@ data class VehiclePosition(
     val direction: String,
     val lat: Double,
     val lon: Double,
+    val bearing: Float?,
     val timestampMs: Long,
     val dataSource: String,
     val quality: DataQuality

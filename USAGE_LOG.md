@@ -18,10 +18,10 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 47 |
+| Total entries | 48 |
 | Avg satisfaction | — |
 | Sessions | 5 |
-| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction |
+| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction, Step 4b line rendering |
 | Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 Checkpoint 2 ($8.61, post-Step 4a) |
 
 ---
@@ -618,6 +618,32 @@
   Committed implementation on the branch (`4be6503`), fast-forward merged to `main`, pushed. Updated REQUIREMENTS.md status (Step 4a → Done) and added a PLAN.md change-log entry covering the four debug iterations. Branch `step-4a-gtfs-extraction` left in place for now.
 - **Agreement:** *(current entry — pending)*
 - **Plan revised after:** Yes — Step 4a marked Done; BUG-005 logged.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+## Phase: Step 4b — Line Rendering
+
+---
+
+### Entry 048
+- **Date:** 2026-05-07
+- **Prompt summary:** "yeah please commit and push and then continue on 4b" — user authorised the token-checkpoint commit and approved continuing into Step 4b implementation.
+- **My response summary:** Committed Checkpoint 2 to main (`7d48aa7`). Created branch `step-4b-render-lines`. Read existing files (CommuteConfigStore, CommuteConfig, MapViewModel, StopConfigBottomSheet, Line) to understand the data flow. **Surfaced a design issue I caught at read-time:** `CommuteConfig.lineId` stores the SL Transport API's integer line ID (e.g. "401") but matching against the GTFS asset requires the *designation* (e.g. "4"). Decided to extend CommuteConfig with `lineDesignation` and `transportMode` as nullable fields (back-compat for any configs saved before Step 4b — Gson sets null for missing fields, and our match function treats null-or-blank as "skip with no overlay" rather than crashing).
+  
+  Implementation:
+  - new `model/SlLine.kt` — data classes `SlLineCatalog` / `SlLineEntry` / `SlDirection` / `SlStop` mirroring the JSON shape exactly so Gson maps with no extra config
+  - extended `CommuteConfig` with the two nullable fields
+  - new `repository/SlLineRepository.kt` — async asset load (`Dispatchers.IO`, cached after first call) + `matchConfig()` with a four-step fallback (exact headsign → contains either way → first direction)
+  - `StopConfigBottomSheet`: populates the new fields from the selected `StopLineOption.line` and broadcasts `setFragmentResult("commute_saved")` on save success
+  - `MainActivity`: lazy-creates the `CommuteConfigStore` + `SlLineRepository`, kicks off the catalog load via `lifecycleScope.launch`, registers a `FragmentResultListener` for the broadcast, and on each rebuild draws a `Polyline` (12dp stroke, alpha 180 for layering) plus filled-circle `Marker`s for each stop along the matched direction. Five-colour palette cycle for multi-commute distinction.
+
+  Build verified clean (`./gradlew assembleDebug`) on the first try — no debug iterations needed beyond the initial write. Step 4b was a much cleaner implementation pass than Step 4a (no SSL/cert/encoding/library traps). Committed (`c32995f`), fast-forward merged to main, pushed.
+
+  Runtime test still pending — same situation as previous steps, requires the collaborator's emulator. Will need them to: (a) confirm the existing search/marker UI still works, (b) confirm any commute they had saved before Step 4b either re-renders correctly (if they saved it after we extended CommuteConfig) or appears blank (if it's a legacy save without designation), (c) save a new commute and visually confirm a coloured line + dots appear on the map and persist after closing the sheet, (d) save a second commute and confirm the colours differ.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — Step 4b marked Done (build verified, runtime pending). Step 4 (P1-FR3) now substantively complete pending runtime confirmation.
 - **User feedback:** *(pending — start next prompt with [[...]])*
 - **Satisfaction:** —
 

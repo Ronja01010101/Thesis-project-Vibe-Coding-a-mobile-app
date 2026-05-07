@@ -46,16 +46,20 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.events.MapListener
 import org.osmdroid.events.ScrollEvent
 import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.MapEventsOverlay
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Overlay
 import org.osmdroid.views.overlay.Polyline
+import org.osmdroid.views.overlay.infowindow.InfoWindow
 
 class MainActivity : AppCompatActivity() {
 
@@ -121,8 +125,26 @@ class MainActivity : AppCompatActivity() {
         map = findViewById(R.id.map)
         map.setTileSource(TileSourceFactory.MAPNIK)
         map.setMultiTouchControls(true)
+        // Disable OSMDroid's built-in zoom controller — it auto-hides and is
+        // anchored at bottom-center where it overlaps the live_status banner.
+        // We use the custom +/- buttons in the layout instead (zoom_in / zoom_out).
+        map.zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
         map.controller.setZoom(13.0)
         map.controller.setCenter(GeoPoint(STOCKHOLM_LAT, STOCKHOLM_LON))
+
+        // Tapping anywhere on the map (that isn't a marker) closes any open
+        // InfoWindow. Added at index 0 so it gets the event after marker
+        // overlays have had their chance to handle it.
+        map.overlays.add(0, MapEventsOverlay(object : MapEventsReceiver {
+            override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
+                InfoWindow.closeAllInfoWindowsOn(map)
+                return false
+            }
+            override fun longPressHelper(p: GeoPoint?): Boolean = false
+        }))
+
+        findViewById<Button>(R.id.zoom_in).setOnClickListener { map.controller.zoomIn() }
+        findViewById<Button>(R.id.zoom_out).setOnClickListener { map.controller.zoomOut() }
 
         map.addMapListener(object : MapListener {
             override fun onScroll(event: ScrollEvent?): Boolean {
@@ -176,9 +198,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun renderTrackingState(state: TrackingState) {
         lastTrackingState = state
+        // Idle is the pre-onResume state; nothing useful to show, keep the bar
+        // hidden so it doesn't visually compete with the map. All other states
+        // surface user-visible information so we show the bar.
+        liveStatusView.visibility = if (state is TrackingState.Idle) View.GONE else View.VISIBLE
         liveStatusView.text = when (state) {
             is TrackingState.Idle ->
-                "Live tracker idle"
+                ""
             is TrackingState.NoActiveCommute -> if (state.savedCount == 0) {
                 "No commutes saved — tap a stop on the map to add one."
             } else {
@@ -375,9 +401,19 @@ class MainActivity : AppCompatActivity() {
      * "nearest to center" rather than "inside boundingBox" because boundingBox
      * is unreliable until the MapView has been measured, and on slow emulators
      * the stops can arrive first. Distance to center is always well-defined.
+     *
+     * Stops are hidden when the map is zoomed out below [MIN_STOP_ZOOM] so the
+     * initial fully-zoomed-out map isn't a wall of dots — the user has to zoom
+     * in once before stops appear.
      */
     private fun rebuildVisibleMarkers() {
-        if (allStops.isEmpty()) return
+        visibleMarkers.forEach { map.overlays.remove(it) }
+        visibleMarkers.clear()
+
+        if (allStops.isEmpty() || map.zoomLevelDouble < MIN_STOP_ZOOM) {
+            map.invalidate()
+            return
+        }
 
         val nearest = allStops.sortedBy { stop ->
             val dLat = stop.lat - centerLat
@@ -385,14 +421,13 @@ class MainActivity : AppCompatActivity() {
             dLat * dLat + dLon * dLon
         }.take(MAX_MARKERS)
 
-        visibleMarkers.forEach { map.overlays.remove(it) }
-        visibleMarkers.clear()
-
+        val stopIcon = makeStopDot(STOP_DOT_COLOR, STOP_DOT_DIAMETER_DP)
         nearest.forEach { stop ->
             val marker = Marker(map)
             marker.position = GeoPoint(stop.lat, stop.lon)
             marker.title = stop.name
-            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+            marker.icon = stopIcon
+            marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             marker.setOnMarkerClickListener { _, _ ->
                 openCommuteConfig(stop)
                 true
@@ -469,8 +504,8 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun makeStopDot(color: Int): Drawable {
-        val sizePx = (resources.displayMetrics.density * 12f).toInt()
+    private fun makeStopDot(color: Int, sizeDp: Float = 12f): Drawable {
+        val sizePx = (resources.displayMetrics.density * sizeDp).toInt()
         val shape = ShapeDrawable(OvalShape())
         shape.intrinsicWidth = sizePx
         shape.intrinsicHeight = sizePx
@@ -558,6 +593,14 @@ class MainActivity : AppCompatActivity() {
         private const val STOCKHOLM_LON = 18.0686
         private const val MAX_MARKERS = 400
         private const val REBUILD_DEBOUNCE_MS = 200L
+        // Below this zoom level, plain stop markers are hidden — keeps the
+        // initial city-wide view uncluttered. The default starting zoom is 13,
+        // so the user has to zoom in once to see stops.
+        private const val MIN_STOP_ZOOM = 14.0
+        private const val STOP_DOT_DIAMETER_DP = 6f
+        // Muted blue-grey so the dots are visible against OSM tiles but don't
+        // dominate the map.
+        private const val STOP_DOT_COLOR = 0xFF607D8B.toInt()
 
         // Color cycle for commute overlays — distinct + colour-blind friendly enough
         // that two or three saved commutes are easy to tell apart on a basic map tile.

@@ -69,9 +69,49 @@
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 
+    <!-- Custom zoom controls. We disable OSMDroid's built-in zoom controller
+         (which auto-hides and is always anchored at bottom-center, overlapping
+         the live_status banner) and use these buttons instead. They sit
+         bottom-end with enough bottom margin to clear the live_status banner. -->
+    <LinearLayout
+        android:id="@+id/zoom_controls"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_marginEnd="12dp"
+        android:layout_marginBottom="72dp"
+        android:orientation="vertical">
+
+        <Button
+            android:id="@+id/zoom_in"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:text="+"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:elevation="4dp"
+            android:padding="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
+
+        <Button
+            android:id="@+id/zoom_out"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
+            android:layout_marginTop="8dp"
+            android:text="−"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:elevation="4dp"
+            android:padding="0dp"
+            android:minWidth="0dp"
+            android:minHeight="0dp" />
+    </LinearLayout>
+
     <!-- Step 5 verification overlay: shows live-tracking status (idle / no
-         active commute / polling stats / error). Will be redesigned or
-         replaced by Step 6 (markers on map) and Step 10 (polish). -->
+         active commute / polling stats / error). Hidden by default; visibility
+         is toggled in MainActivity.renderTrackingState. Will be redesigned in
+         Step 10 (polish). -->
     <TextView
         android:id="@+id/live_status"
         android:layout_width="match_parent"
@@ -81,6 +121,7 @@
         android:padding="12dp"
         android:textColor="@android:color/white"
         android:textSize="13sp"
+        android:visibility="gone"
         android:text="" />
 
 </FrameLayout>

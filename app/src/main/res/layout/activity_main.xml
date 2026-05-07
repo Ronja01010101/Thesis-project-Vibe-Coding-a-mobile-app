@@ -67,6 +67,89 @@
                 android:layout_height="wrap_content"
                 android:maxHeight="280dp" />
         </com.google.android.material.card.MaterialCardView>
+
+        <!-- Step 7 (P1-FR8 / P1-FR9): top warning bar surfaces SL Deviations
+             that match the active commute's line + stop. Hidden when none
+             apply; tapping expands to show details. The (!) badge on vehicle
+             markers surfaces the same information per-vehicle. -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/deviation_card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:visibility="gone"
+            app:cardBackgroundColor="#FFB300"
+            app:cardCornerRadius="8dp"
+            app:cardElevation="4dp"
+            android:clickable="true"
+            android:focusable="true"
+            xmlns:app="http://schemas.android.com/apk/res-auto">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="10dp"
+                        android:text="!"
+                        android:textColor="@android:color/white"
+                        android:textSize="18sp"
+                        android:textStyle="bold"
+                        android:background="#E64A19"
+                        android:gravity="center"
+                        android:minWidth="28dp"
+                        android:minHeight="28dp" />
+
+                    <TextView
+                        android:id="@+id/deviation_header"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:textColor="@android:color/black"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:maxLines="2"
+                        android:ellipsize="end"
+                        android:text="" />
+
+                    <TextView
+                        android:id="@+id/deviation_count"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="@android:color/white"
+                        android:textSize="12sp"
+                        android:textStyle="bold"
+                        android:background="#E64A19"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:paddingTop="2dp"
+                        android:paddingBottom="2dp"
+                        android:visibility="gone"
+                        android:text="" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/deviation_details"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:textColor="@android:color/black"
+                    android:textSize="13sp"
+                    android:visibility="gone"
+                    android:text="" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 
     <!-- Custom zoom controls. We disable OSMDroid's built-in zoom controller

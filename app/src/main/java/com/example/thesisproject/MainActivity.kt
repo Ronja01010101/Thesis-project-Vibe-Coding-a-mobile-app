@@ -34,6 +34,7 @@ import com.example.thesisproject.model.DataQuality
 import com.example.thesisproject.model.Stop
 import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.GtfsRealtimeRepository
+import com.example.thesisproject.repository.SlDeviationsRepository
 import com.example.thesisproject.repository.SlLineRepository
 import com.example.thesisproject.tracking.LivePositionTracker
 import com.example.thesisproject.tracking.TrackingState
@@ -88,17 +89,28 @@ class MainActivity : AppCompatActivity() {
     // Step 5: live-vehicle tracking. Lifecycle-bound — start in onResume,
     // stop in onPause. State observed by the verification overlay.
     private val realtimeRepository by lazy { GtfsRealtimeRepository() }
+    private val deviationsRepository by lazy { SlDeviationsRepository() }
     private val livePositionTracker by lazy {
         LivePositionTracker(
             configStore = commuteStore,
             lineRepository = lineRepository,
             realtimeRepository = realtimeRepository,
+            deviationsRepository = deviationsRepository,
             apiKey = BuildConfig.GTFS_REALTIME_KEY
         )
     }
     private lateinit var liveStatusView: TextView
     private var lastTrackingState: TrackingState = TrackingState.Idle
     private var ageTickerJob: Job? = null
+
+    // Step 7: deviations card (top warning bar). Hidden when no active
+    // deviations apply to the current commute's line+stop. Tap toggles the
+    // details expansion. See activity_main.xml `deviation_card`.
+    private lateinit var deviationCard: MaterialCardView
+    private lateinit var deviationHeader: TextView
+    private lateinit var deviationCount: TextView
+    private lateinit var deviationDetails: TextView
+    private var deviationDetailsExpanded: Boolean = false
 
     // Step 6: live vehicle markers + auto-fit-camera state.
     // vehicleMarkers are removed and re-added every state emission (small N — usually
@@ -191,6 +203,18 @@ class MainActivity : AppCompatActivity() {
         // the polling itself is gated by onResume/onPause so we don't burn
         // Trafiklab quota when the app isn't visible.
         liveStatusView = findViewById(R.id.live_status)
+
+        // Step 7: bind the deviations card. Tap toggles details expansion;
+        // visibility/text is driven by renderDeviations.
+        deviationCard = findViewById(R.id.deviation_card)
+        deviationHeader = findViewById(R.id.deviation_header)
+        deviationCount = findViewById(R.id.deviation_count)
+        deviationDetails = findViewById(R.id.deviation_details)
+        deviationCard.setOnClickListener {
+            deviationDetailsExpanded = !deviationDetailsExpanded
+            deviationDetails.visibility = if (deviationDetailsExpanded) View.VISIBLE else View.GONE
+        }
+
         lifecycleScope.launch {
             livePositionTracker.state.collect { state -> renderTrackingState(state) }
         }
@@ -223,7 +247,49 @@ class MainActivity : AppCompatActivity() {
                 "Live data error: ${state.message}"
         }
         renderVehicles(state)
+        renderDeviations(state)
         maybeAutoFit(state)
+    }
+
+    /**
+     * Step 7: surface deviations matching the active commute. The card stays
+     * hidden when there are none. When at least one applies, show the first
+     * deviation's header (Swedish preferred per docs); if more than one, a
+     * count badge is shown. Tapping the card toggles a details expansion that
+     * concatenates all deviations' header+details text.
+     */
+    private fun renderDeviations(state: TrackingState) {
+        val deviations = (state as? TrackingState.Polling)?.deviations.orEmpty()
+        if (deviations.isEmpty()) {
+            deviationCard.visibility = View.GONE
+            deviationDetailsExpanded = false
+            deviationDetails.visibility = View.GONE
+            return
+        }
+        // Highest-importance first (per docs, importance_level is the only
+        // priority field meant for sorting). Nulls last.
+        val sorted = deviations.sortedByDescending { it.importanceLevel ?: Int.MIN_VALUE }
+        val primary = sorted.first().preferredVariant("sv")
+        deviationHeader.text = primary?.header.orEmpty()
+        deviationCard.visibility = View.VISIBLE
+        if (sorted.size > 1) {
+            deviationCount.visibility = View.VISIBLE
+            deviationCount.text = "+${sorted.size - 1}"
+        } else {
+            deviationCount.visibility = View.GONE
+        }
+        deviationDetails.text = sorted.joinToString(separator = "\n\n") { dev ->
+            val v = dev.preferredVariant("sv")
+            buildString {
+                append(v?.header.orEmpty())
+                val details = v?.details.orEmpty()
+                if (details.isNotBlank()) {
+                    append("\n")
+                    append(details)
+                }
+            }
+        }
+        deviationDetails.visibility = if (deviationDetailsExpanded) View.VISIBLE else View.GONE
     }
 
     /**
@@ -246,12 +312,19 @@ class MainActivity : AppCompatActivity() {
         } else {
             COMMUTE_PALETTE[0]
         }
+        // Step 7: every vehicle on the active commute's line gets the (!)
+        // badge if any deviation matches that line. The Deviations API is
+        // already filtered to the active commute's line+stop at request
+        // time, so any non-empty deviations list applies to all of these
+        // vehicles. (The API doesn't model per-trip disruption, only per-
+        // line / per-stop — this is the most precise signal we can give.)
+        val hasDeviation = state.deviations.isNotEmpty()
         state.vehicles.forEach { vehicle ->
             val isUncertain = vehicle.quality != DataQuality.LIVE
             val hasBearing = vehicle.bearing != null
             val marker = Marker(map)
             marker.position = GeoPoint(vehicle.lat, vehicle.lon)
-            marker.icon = makeVehicleIcon(baseColor, isUncertain, hasBearing)
+            marker.icon = makeVehicleIcon(baseColor, isUncertain, hasBearing, hasDeviation)
             marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
             // OSMDroid's Marker.rotation is counterclockwise. GTFS-RT bearing is
             // clockwise from north, so we negate to make the icon's notch point
@@ -262,6 +335,7 @@ class MainActivity : AppCompatActivity() {
                 append(" → ")
                 append(vehicle.direction)
                 if (isUncertain) append(" — uncertain")
+                if (hasDeviation) append(" — disruption")
                 vehicle.bearing?.let { append(" — bearing ${it.toInt()}°") }
             }
             vehicleMarkers.add(marker)
@@ -270,7 +344,12 @@ class MainActivity : AppCompatActivity() {
         map.invalidate()
     }
 
-    private fun makeVehicleIcon(color: Int, isUncertain: Boolean, hasBearing: Boolean): Drawable {
+    private fun makeVehicleIcon(
+        color: Int,
+        isUncertain: Boolean,
+        hasBearing: Boolean,
+        hasDeviation: Boolean = false
+    ): Drawable {
         val dpFactor = resources.displayMetrics.density
         val sizePx = (dpFactor * 26f).toInt()
         val bitmap = Bitmap.createBitmap(sizePx, sizePx, Bitmap.Config.ARGB_8888)
@@ -311,6 +390,37 @@ class MainActivity : AppCompatActivity() {
             }
             canvas.drawPath(path, notchPaint)
         }
+
+        if (hasDeviation) {
+            // Step 7: small (!) badge inside the icon, bottom-right area so it
+            // doesn't conflict with the bearing notch (top-center). The whole
+            // bitmap rotates with marker.rotation so the badge moves with the
+            // vehicle's heading — acceptable; the badge meaning ("disruption
+            // affects this line") doesn't depend on its position.
+            val badgeCx = sizePx * 0.72f
+            val badgeCy = sizePx * 0.72f
+            val badgeR = sizePx * 0.22f
+            val badgeFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = 0xFFE64A19.toInt() // deep orange, matches warning bar accent
+                style = Paint.Style.FILL
+            }
+            canvas.drawCircle(badgeCx, badgeCy, badgeR, badgeFill)
+            val badgeStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = Color.WHITE
+                style = Paint.Style.STROKE
+                strokeWidth = dpFactor * 1.0f
+            }
+            canvas.drawCircle(badgeCx, badgeCy, badgeR, badgeStroke)
+            val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                this.color = Color.WHITE
+                textSize = dpFactor * 9f
+                textAlign = Paint.Align.CENTER
+                typeface = android.graphics.Typeface.DEFAULT_BOLD
+            }
+            val textY = badgeCy - (textPaint.descent() + textPaint.ascent()) / 2f
+            canvas.drawText("!", badgeCx, textY, textPaint)
+        }
+
         return BitmapDrawable(resources, bitmap)
     }
 

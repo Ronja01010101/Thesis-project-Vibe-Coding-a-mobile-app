@@ -886,4 +886,15 @@
 
 ---
 
+### Entry 068
+- **Date:** 2026-05-07
+- **Prompt summary:** User picked "Fix now (~30 LOC)" for BUG-009 via AskUserQuestion.
+- **My response summary:** Implemented the BUG-009 fix in three files: (1) `CommuteConfig.kt` — added `directionCode: Int? = null` field with explanatory KDoc (nullable for back-compat with configs saved before this change); (2) `StopConfigBottomSheet.kt` — save flow now passes `directionCode = option.directionCode` (the value was already plumbed through `StopLineOption.directionCode` from SL Transport's `direction_code` field, just discarded at save time before); (3) `SlLineRepository.matchDirection` — now takes the full `CommuteConfig` instead of just the direction string, and tries direction-matching strategies in order of reliability: (a) `direction_id` match when `directionCode` is present (deterministic, immune to label divergence between SL Transport and GTFS), (b) headsign exact-then-contains matching (works after BUG-005 fix for most lines), (c) fall back to entry's first direction. Build verified clean. BUGS.md: BUG-009 marked "Fixed pending runtime test". Committed (will batch with the log update). The fix only takes effect for newly-saved commutes — existing legacy commutes (without `directionCode`) keep using the headsign fallback path, which works for many lines.
+- **Agreement:** Yes — fix shipped per user's choice.
+- **Plan revised after:** Yes — `CommuteConfig` schema extended; matchDirection signature changed; BUG-009 marked Fixed pending runtime test.
+- **User feedback:** *(pending)*
+- **Satisfaction:** Manual test outcome: implementation **clean — zero debug iterations** (build verified on first try). Runtime confirmation pending: user re-saves the line 57 → Sofia commute (existing legacy save without `directionCode` won't benefit; needs to be re-saved through the bottom sheet) and verifies Logcat shows the right direction's tripIds being used.
+
+---
+
 *New entries appended below as the project progresses.*

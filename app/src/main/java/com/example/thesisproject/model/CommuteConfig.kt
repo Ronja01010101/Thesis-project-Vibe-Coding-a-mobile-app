@@ -16,5 +16,13 @@ data class CommuteConfig(
      */
     val lineDesignation: String? = null,
     /** SL transport mode (BUS, METRO, TRAIN, TRAM, SHIP). Nullable for the same reason. */
-    val transportMode: String? = null
+    val transportMode: String? = null,
+    /**
+     * GTFS direction_id (0 or 1) as exposed by SL Transport API. When set,
+     * preferred over headsign-string matching for picking the right direction
+     * within a line — deterministic and immune to SL Transport's direction
+     * labels diverging from GTFS final-stop names (BUG-009). Nullable for
+     * configs saved before Step 5's BUG-009 fix.
+     */
+    val directionCode: Int? = null
 )

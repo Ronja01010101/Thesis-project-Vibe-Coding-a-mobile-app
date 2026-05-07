@@ -96,20 +96,31 @@ class SlLineRepository(private val context: Context) {
             entries
         }
 
-        // For each entry in priority order, look for a direction matching
-        // config.direction. Use the first entry that can produce a match.
+        // For each entry in priority order, try direction matching strategies
+        // in order of reliability:
+        //   1. direction_id match (deterministic, when CommuteConfig has it)
+        //   2. headsign match (works for most lines after BUG-005 fix)
+        //   3. fallback to entry's first direction (last resort)
         ordered.forEach { entry ->
-            val direction = matchDirection(entry, config.direction)
+            val direction = matchDirection(entry, config)
             if (direction != null) return entry to direction
         }
-        // No headsign match anywhere — fall back to first entry's first
-        // direction so we at least show something rather than nothing.
         val fallbackEntry = ordered.firstOrNull { it.directions.isNotEmpty() } ?: return null
         return fallbackEntry to fallbackEntry.directions.first()
     }
 
-    private fun matchDirection(entry: SlLineEntry, configDirection: String): SlDirection? {
+    private fun matchDirection(entry: SlLineEntry, config: CommuteConfig): SlDirection? {
         if (entry.directions.isEmpty()) return null
+        // 1) direction_id match — deterministic when SL Transport gave us
+        // direction_code at save time. Bypasses any string-label mismatch
+        // between SL Transport (e.g. "Sofia") and GTFS (e.g. "Motalavägen").
+        config.directionCode?.let { code ->
+            entry.directions.firstOrNull { it.directionId == code }?.let { return it }
+        }
+        // 2) Headsign matching — exact, then contains-either-way. Works for
+        // most lines once BUG-005's blank-headsign fallback has populated
+        // direction.headsign with the trip's final-stop name.
+        val configDirection = config.direction
         entry.directions.firstOrNull { it.headsign.equals(configDirection, ignoreCase = true) }
             ?.let { return it }
         entry.directions.firstOrNull {

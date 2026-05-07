@@ -52,4 +52,18 @@
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>
 
+    <!-- Step 5 verification overlay: shows live-tracking status (idle / no
+         active commute / polling stats / error). Will be redesigned or
+         replaced by Step 6 (markers on map) and Step 10 (polish). -->
+    <TextView
+        android:id="@+id/live_status"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:background="#CC000000"
+        android:padding="12dp"
+        android:textColor="@android:color/white"
+        android:textSize="13sp"
+        android:text="" />
+
 </FrameLayout>

@@ -28,6 +28,7 @@ retrofit-gson = { group = "com.squareup.retrofit2", name = "converter-gson", ver
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-ktx", version.ref = "lifecycleViewmodel" }
 androidx-preference = { group = "androidx.preference", name = "preference-ktx", version = "1.2.1" }
+gtfs-realtime-bindings = { group = "org.mobilitydata", name = "gtfs-realtime-bindings", version = "0.0.8" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -11,6 +11,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
 import android.widget.EditText
+import android.widget.TextView
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
@@ -23,7 +24,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.thesisproject.model.Stop
 import com.example.thesisproject.repository.CommuteConfigStore
+import com.example.thesisproject.repository.GtfsRealtimeRepository
 import com.example.thesisproject.repository.SlLineRepository
+import com.example.thesisproject.tracking.LivePositionTracker
+import com.example.thesisproject.tracking.TrackingState
 import com.example.thesisproject.ui.MapViewModel
 import com.example.thesisproject.ui.StopAdapter
 import com.example.thesisproject.ui.StopConfigBottomSheet
@@ -64,6 +68,19 @@ class MainActivity : AppCompatActivity() {
     private val lineRepository by lazy { SlLineRepository(this) }
     private val commuteOverlays: MutableList<Overlay> = mutableListOf()
     private var rebuildJob: Job? = null
+
+    // Step 5: live-vehicle tracking. Lifecycle-bound — start in onResume,
+    // stop in onPause. State observed by the verification overlay.
+    private val realtimeRepository by lazy { GtfsRealtimeRepository() }
+    private val livePositionTracker by lazy {
+        LivePositionTracker(
+            configStore = commuteStore,
+            lineRepository = lineRepository,
+            realtimeRepository = realtimeRepository,
+            apiKey = BuildConfig.GTFS_REALTIME_KEY
+        )
+    }
+    private lateinit var liveStatusView: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,6 +136,38 @@ class MainActivity : AppCompatActivity() {
 
         // Initial draw — if there are no saved commutes this is a no-op.
         rebuildCommuteOverlays()
+
+        // Step 5: bind the verification overlay and start collecting tracker
+        // state. Collection runs for the activity's lifetime (lifecycleScope);
+        // the polling itself is gated by onResume/onPause so we don't burn
+        // Trafiklab quota when the app isn't visible.
+        liveStatusView = findViewById(R.id.live_status)
+        lifecycleScope.launch {
+            livePositionTracker.state.collect { state -> renderTrackingState(state) }
+        }
+    }
+
+    private fun renderTrackingState(state: TrackingState) {
+        liveStatusView.text = when (state) {
+            is TrackingState.Idle ->
+                "Live tracker idle"
+            is TrackingState.NoActiveCommute -> if (state.savedCount == 0) {
+                "No commutes saved — tap a stop on the map to add one."
+            } else {
+                "No commute active right now (${state.savedCount} saved)."
+            }
+            is TrackingState.Polling -> {
+                val ageS = ((System.currentTimeMillis() - state.lastUpdateMs) / 1000)
+                    .coerceAtLeast(0)
+                val cfg = state.activeCommute
+                val line = cfg.lineDesignation?.takeIf { it.isNotBlank() } ?: cfg.lineId
+                val n = state.vehicles.size
+                val noun = if (n == 1) "vehicle" else "vehicles"
+                "Live: line $line → ${cfg.direction} — $n $noun, updated ${ageS}s ago"
+            }
+            is TrackingState.Error ->
+                "Live data error: ${state.message}"
+        }
     }
 
     private fun setupSearch() {
@@ -285,11 +334,13 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         map.onResume()
+        livePositionTracker.start(lifecycleScope)
     }
 
     override fun onPause() {
         super.onPause()
         map.onPause()
+        livePositionTracker.stop()
     }
 
     override fun onDestroy() {

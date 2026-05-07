@@ -87,6 +87,10 @@ dependencies {
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.preference)
+    // Step 5: GTFS Realtime protobuf bindings. Adds ~1.5 MB DEX. ProGuard
+    // keep rules will be needed if/when minification is enabled (release
+    // builds currently have isMinifyEnabled=false so we skip them for now).
+    implementation(libs.gtfs.realtime.bindings)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(libs.androidx.junit)

@@ -114,8 +114,14 @@ class SlLineRepository(private val context: Context) {
         // 1) direction_id match — deterministic when SL Transport gave us
         // direction_code at save time. Bypasses any string-label mismatch
         // between SL Transport (e.g. "Sofia") and GTFS (e.g. "Motalavägen").
+        // SL Transport uses 1-based direction codes (1, 2) while GTFS uses
+        // 0-based direction_id (0, 1). Try as-is first (covers GTFS-aligned
+        // systems), then try code-1 (covers SL's 1-based convention).
         config.directionCode?.let { code ->
             entry.directions.firstOrNull { it.directionId == code }?.let { return it }
+            if (code > 0) {
+                entry.directions.firstOrNull { it.directionId == code - 1 }?.let { return it }
+            }
         }
         // 2) Headsign matching — exact, then contains-either-way. Works for
         // most lines once BUG-005's blank-headsign fallback has populated

@@ -908,4 +908,15 @@
 
 ---
 
+### Entry 070
+- **Date:** 2026-05-07
+- **Prompt summary:** User pasted enhanced Logcat after re-saving line 57 → Sofia commute. Critical finding: `config: directionCode=2, direction='Sofia'` and `direction_id=0 headsign='Motalavägen'`. The directionCode was populated (so re-save worked, fix's storage path is fine), but it's **2** — not a valid GTFS direction_id (which is 0 or 1). Our match tried `direction_id=2`, found nothing, fell through to headsign ("Sofia" doesn't match "Motalavägen"), then to first-direction fallback (direction_id=0 = Motalavägen).
+- **My response summary:** **Surfaced an unanticipated convention difference: SL Transport uses 1-based direction codes (1, 2) while GTFS uses 0-based direction_id (0, 1).** Mapping is SL `1` → GTFS `0`, SL `2` → GTFS `1`. Updated `SlLineRepository.matchDirection`: try directionCode as-is first (covers GTFS-aligned systems if they exist), then try `code - 1` (covers SL's 1-based convention). One-line addition of fallback logic. Build clean. BUG-009's status note revised to capture this two-step fix history. No re-save needed — the stored CommuteConfig already has directionCode=2; only the matching logic changed.
+- **Agreement:** Implementation done; awaiting runtime confirmation.
+- **Plan revised after:** No — same fix, refined.
+- **User feedback:** *(pending)*
+- **Satisfaction:** Manual test outcome: BUG-009 fix needed a **second iteration** — first iteration assumed SL Transport's direction_code matched GTFS direction_id (0/1), runtime test revealed it's actually 1-based (1/2). Thesis-relevant finding: documented integration assumption that turned out to be wrong; only caught via diagnostic logging that printed both the stored config value and the matched direction.
+
+---
+
 *New entries appended below as the project progresses.*

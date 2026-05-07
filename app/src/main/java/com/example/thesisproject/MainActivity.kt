@@ -10,8 +10,10 @@ import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
 import androidx.appcompat.app.AlertDialog
@@ -114,6 +116,9 @@ class MainActivity : AppCompatActivity() {
         })
 
         setupSearch()
+        findViewById<Button>(R.id.manage_commutes_button).setOnClickListener {
+            openManageCommutesDialog()
+        }
 
         viewModel.stops.observe(this) { stops ->
             allStops = stops
@@ -334,6 +339,42 @@ class MainActivity : AppCompatActivity() {
         resultsCard.visibility = View.GONE
         StopConfigBottomSheet.newInstance(stop.id, stop.name)
             .show(supportFragmentManager, "commute_config")
+    }
+
+    /**
+     * Lists saved commutes; tapping one removes it. Used during testing so
+     * the user can iterate on commute configs without rebuilding the app.
+     * Will be revisited / replaced by a proper "edit commutes" screen later.
+     */
+    private fun openManageCommutesDialog() {
+        val configs = commuteStore.getAll()
+        if (configs.isEmpty()) {
+            AlertDialog.Builder(this)
+                .setTitle("Saved commutes")
+                .setMessage("No commutes saved yet. Tap a stop on the map to add one.")
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        val labels = configs.map { c ->
+            val line = c.lineDesignation?.takeIf { it.isNotBlank() } ?: c.lineId
+            val mode = c.transportMode?.takeIf { it.isNotBlank() }?.let { "$it " } ?: ""
+            "$mode$line → ${c.direction}\n" +
+                "%02d:%02d–%02d:%02d".format(
+                    c.timeWindowStart.hour, c.timeWindowStart.minute,
+                    c.timeWindowEnd.hour, c.timeWindowEnd.minute
+                )
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Saved commutes — tap to delete")
+            .setItems(labels) { _, which ->
+                if (commuteStore.removeAt(which)) {
+                    Toast.makeText(this, "Commute removed", Toast.LENGTH_SHORT).show()
+                    rebuildCommuteOverlays()
+                }
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     override fun onResume() {

@@ -48,6 +48,15 @@ class CommuteConfigStore(context: Context) {
         return true
     }
 
+    /** Removes the commute at [index]. Returns true if a removal happened. */
+    fun removeAt(index: Int): Boolean {
+        val current = getAll()
+        if (index !in current.indices) return false
+        val updated = current.toMutableList().apply { removeAt(index) }
+        prefs.edit().putString(KEY_CONFIGS, gson.toJson(updated, listType)).apply()
+        return true
+    }
+
     private fun overlaps(a: CommuteConfig, b: CommuteConfig): Boolean {
         return a.timeWindowStart.isBefore(b.timeWindowEnd) &&
             b.timeWindowStart.isBefore(a.timeWindowEnd)

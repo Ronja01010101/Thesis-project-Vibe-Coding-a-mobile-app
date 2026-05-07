@@ -18,11 +18,11 @@
 
 | Metric | Value |
 |--------|-------|
-| Total entries | 48 |
+| Total entries | 52 |
 | Avg satisfaction | — |
 | Sessions | 5 |
-| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction, Step 4b line rendering |
-| Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 Checkpoint 2 ($8.61, post-Step 4a) |
+| Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning, Step 4a build-time GTFS extraction, Step 4b line rendering, Step 4b memory hotfix |
+| Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 Checkpoint 3 ($9.61, post-Step-4b runtime test + memory hotfix) |
 
 ---
 
@@ -49,7 +49,21 @@
 - **Limit usage at snapshot:** 22% of current 5h session window, 5% of weekly limit (all models).
 - **Notes:** Implementation session. Higher per-minute cost than Checkpoint 1 ($8.61 / 33m ≈ $0.26/min vs $5.10 / 49m ≈ $0.10/min) — implementation work is roughly **2.5× more expensive per minute** than design/research because of the heavier tool-use cycle (file reads → edits → builds → re-reads), driving up Opus cache writes (177k → 261k). 51% of usage was at >150k context (up from 40% — context grew through the four debug iterations of Step 4a). One agent crash earlier (Bun segfault during a research fetch) was not billed; otherwise no waste.
 
-**Cumulative for the day so far:** $5.10 + $8.61 = $13.71 across two local sessions, all in 2026-05-07.
+**Cumulative for the day after Checkpoint 2:** $5.10 + $8.61 = $13.71 across two local sessions.
+
+### Checkpoint 3 — Session 5 post-Step-4b + memory hotfix (2026-05-07, ~4:18pm)
+- **Cost:** $9.61 (third local session of the day; counter started fresh from another Claude Code restart)
+- **Wall time:** 41m 46s · **API time:** 14m 22s
+- **Code changes:** +369 / −66 lines (Step 4b implementation + memory hotfix)
+- **Model usage:**
+  - `claude-opus-4-7` — 3.0k input · 59.3k output · 11.8M cache read · 350.6k cache write — **$9.61**
+  - `claude-haiku-4-5` — 699 input · 15 output — **$0.0008** (essentially zero — no subagents this session)
+- **Limit usage at snapshot:** 28% of current 5h session window, 7% of weekly limit (all models).
+- **Notes:** Step 4b implementation + emulator-confirmed runtime test + OOM hotfix. Per-minute cost ~$0.23/min — slightly cheaper than Checkpoint 2's implementation rate ($0.26/min) despite the extra debug iteration, because no subagent calls this session. Cache writes (350.6k) are the highest of the three checkpoints — long context held across implementation, runtime test, log analysis, and hotfix.
+
+**Cumulative day total:** $5.10 + $8.61 + $9.61 = **$23.32** across three local sessions, all 2026-05-07. ~2h 3m total wall time.
+
+**Thesis-relevant observation:** the Step 4b memory bug would *not* have been caught by the build-verify pass alone — only runtime testing on the emulator surfaced it via the Logcat GC pressure pattern. The ~$2–3 of token spend on the diagnostic + hotfix iteration is small relative to the value of catching a bug that would otherwise have shipped broken. Worth flagging for the article: AI-assisted implementation reaches "build-clean" quickly, but runtime / hardware testing remains essential for non-trivial code paths.
 
 ---
 
@@ -644,6 +658,56 @@
   Runtime test still pending — same situation as previous steps, requires the collaborator's emulator. Will need them to: (a) confirm the existing search/marker UI still works, (b) confirm any commute they had saved before Step 4b either re-renders correctly (if they saved it after we extended CommuteConfig) or appears blank (if it's a legacy save without designation), (c) save a new commute and visually confirm a coloured line + dots appear on the map and persist after closing the sheet, (d) save a second commute and confirm the colours differ.
 - **Agreement:** *(current entry — pending)*
 - **Plan revised after:** Yes — Step 4b marked Done (build verified, runtime pending). Step 4 (P1-FR3) now substantively complete pending runtime confirmation.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+## Phase: Step 4b — Runtime Test & Memory Hotfix
+
+---
+
+### Entry 049
+- **Date:** 2026-05-07
+- **Prompt summary:** "We're testing on my machine moving forward. The app loads, pretty zoomed out, loads a lot of stops, then crashes" — user has the emulator running locally now (no longer collaborator-blocked) and reports the Step 4b build crashes after stops load.
+- **My response summary:** Acknowledged the crash points strongly at the new code added in Step 4b (the only thing changed since the last working build was the catalog load + overlay drawing). Listed possible causes (15 MB JSON parse OOM, too many overlays, etc.) but refused to fix blindly — asked the user for the FATAL EXCEPTION stack trace from Android Studio's Logcat to confirm the actual cause before changing anything. Pre-committed to a streaming-JSON fix if it turned out to be OOM.
+- **Agreement:** Yes — user pulled Logcat
+- **Plan revised after:** No
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 050
+- **Date:** 2026-05-07
+- **Prompt summary:** User shared a long Logcat dump and said the app actually didn't crash this time, but suspected memory was a factor. No FATAL EXCEPTION in the trace.
+- **My response summary:** No fatal trace, but read the GC log carefully. The heap progression was the smoking gun: started at 28 MB, climbed to **135 MB peak** in 2 seconds during a JSON parse window, then sustained at **90–119 MB** with constant ~19 MB LOS allocations. Diagnosis: full Gson tree-build of the 15 MB `sl-lines.json` was loading the entire catalog object graph regardless of how many commutes the user had saved (zero in this case). On a low-spec emulator with limited heap, this lands right at the edge — earlier crash was likely OOM at peak; the survival this time was just OS giving more headroom transiently.
+  
+  Fix: refactored `SlLineRepository` to stream-parse with Gson's `JsonReader`, walking the `lines` array and keeping only entries whose `lineDesignation` is in the set of designations from saved configs. Non-matching entries become unreachable mid-iteration and get GC'd before peak. With 0 saved configs the asset isn't opened at all. Added a `Job` to `MainActivity.rebuildCommuteOverlays` so concurrent rebuilds (e.g. fast successive saves) cancel cleanly. Build verified, committed (`bac2809`), pushed to main as a hotfix on top of Step 4b. Asked the user to rebuild and retest, plus to capture a FATAL trace if it crashes again.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — Step 4b memory model fundamentally changed (full-catalog → filtered streaming).
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 051
+- **Date:** 2026-05-07
+- **Prompt summary:** "it runs, seems stable, i was able to set a commute. everything on the UI looks jank but its low priority, thats for refinement later i think. Here is the log..." — user confirmed the app runs after the hotfix, was able to save a commute, observed UI jank but classified as low priority. Shared Logcat from the new run.
+- **My response summary:** Confirmed the fix worked from the new GC log: pre-fix sustained heap was 90–119 MB, post-fix is **5–17 MB**. ~10× reduction. Explained how to read "growing memory" in Logcat (the `AAMB/BBMB` pattern in GC lines — BB trending up = growing). Acknowledged the user's "jank is low priority" call. Diagnosed the jank from the same Logcat: three "Davey!" warnings (1.4–1.8 s frame times) and one "Skipped 93 frames" event around bottom-sheet interactions — main-thread work, not memory. Likely causes: OSMDroid marker rebuilds, bottom-sheet inflation, polyline+dot bulk-add. Offered to log as a deferred bug. Proposed three options for wrapping: log the hotfix, take a `/cost` snapshot, or push into Step 5.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** No code change in this turn — just diagnostic confirmation that the fix held.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** —
+
+---
+
+### Entry 052
+- **Date:** 2026-05-07
+- **Prompt summary:** "here is a snapshot of costs: [image]. please do 1 + 2, log everything. I will continue with a fresh session for step 5 so make sure all vital things are logged and that every new session reads the plans etc" — user shared the third `/cost` snapshot ($9.61), asked for all the logging, and explicitly asked that future sessions pick up the planning files when they start.
+- **My response summary:** (1) Updated CLAUDE.md "Rules for Claude" to expand the session-start reading rule from "USAGE_LOG.md only" to "PLAN.md → REQUIREMENTS.md → BUGS.md → last 5–10 entries of USAGE_LOG.md", and updated the Project files section to mention BUGS.md (which didn't exist when CLAUDE.md was last edited). (2) Updated REQUIREMENTS.md status tracker — Step 4b row now reads "Done (runtime tested 2026-05-07)" with a note about the memory hotfix and BUG-006. (3) Added a PLAN.md change-log entry for the runtime test + hotfix, including a methodological observation about runtime testing being essential even after build-clean. (4) Logged BUG-006 in BUGS.md (UI jank during sheet interactions, low priority). (5) Added Token Checkpoint 3 to USAGE_LOG.md ($9.61, 41m 46s, +369/−66 lines) with cumulative-day total ($23.32) and thesis-relevant cost-vs-bug-detection observation. (6) Added Entries 049–052 to USAGE_LOG.md (this entry). (7) Updated Summary Stats (entries 48 → 52, phases logged extended). About to commit as `update planning files: ...` and push.
+- **Agreement:** *(current entry — pending)*
+- **Plan revised after:** Yes — CLAUDE.md updated (process rule), planning files all reflect Step 4 fully complete, Step 5 is the unambiguous next-up with all context logged for a fresh session to pick up.
 - **User feedback:** *(pending — start next prompt with [[...]])*
 - **Satisfaction:** —
 

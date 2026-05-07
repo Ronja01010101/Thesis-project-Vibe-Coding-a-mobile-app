@@ -23,11 +23,16 @@ This is a DSR thesis artifact. The development process is being documented for a
 - Keep code beginner-readable — we are non-programmers
 - One requirement at a time
 - API keys are stored in local.properties — never hardcode them
-- When starting a session, read USAGE_LOG.md to understand where we left off
+- **At the start of every session, read all four planning files in this order to understand current project state:**
+  1. **PLAN.md** — overall plan + change log (so you understand what's been decided and why)
+  2. **REQUIREMENTS.md** — status tracker for each step (so you know which step is next)
+  3. **BUGS.md** — deferred / known bugs (so you don't accidentally re-fix or duplicate)
+  4. **USAGE_LOG.md** — read at least the last 5–10 entries (so you know where we left off)
 - Update USAGE_LOG.md after every response
 - **Never write personal information** (email addresses, full real names, work email domains, phone numbers, home/work addresses, local Windows usernames, machine paths beyond the project root, auth tokens, API keys, passwords, or anything that uniquely identifies a person beyond what's already public in the GitHub repo URL) into ANY committed project file — including USAGE_LOG.md, PLAN.md, BUGS.md, REQUIREMENTS.md, CLAUDE.md, code comments, or commit messages. The repo is public. If the user mentions any of these in conversation, summarise without quoting and use generic terms like "user", "collaborator", "their work email" instead.
 
 ## Project files
 - PLAN.md — living project plan with change log
-- USAGE_LOG.md — full exchange log for thesis analysis
-- REQUIREMENTS.md — requirements list (added in Phase 1)
+- REQUIREMENTS.md — requirements list + per-step status tracker
+- BUGS.md — non-blocker bugs and follow-ups, deferred until later
+- USAGE_LOG.md — full exchange log for thesis analysis (also has Token Checkpoints)

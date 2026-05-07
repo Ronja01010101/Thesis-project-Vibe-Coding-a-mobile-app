@@ -22,7 +22,22 @@
 | Avg satisfaction | — |
 | Sessions | 5 |
 | Phases logged | Pre-project setup, Deciding tech stack, Phase 0 completion, Phase 1 requirements, Phase 2 API & map setup, Pre-build plan review, Step 3 commute config, Step 3.5 limit map data, Step 4 planning |
-| Token checkpoint | run `/cost` to check |
+| Token checkpoint | see Token Checkpoints section below — latest: 2026-05-07 ($5.10) |
+
+---
+
+## Token Checkpoints
+
+> Snapshots taken with the `/cost` slash command. Useful for thesis token-spend analysis.
+
+### Checkpoint 1 — Session 5 mid-session (2026-05-07)
+- **Cost:** $5.10
+- **Wall time:** 48m 51s · **API time:** 18m 35s
+- **Code changes:** +134 / −15 lines (all planning files — no app code yet)
+- **Model usage:**
+  - `claude-opus-4-7` — 3.9k input · 59.8k output · 4.8M cache read · 176.8k cache write — **$5.01**
+  - `claude-haiku-4-5` — 64.9k input · 2.5k output · 1 web search — **$0.09**
+- **Notes:** Snapshot taken before starting Step 4a. Costs reflect a research-and-redesign session: two subagent runs for Trafiklab GTFS research + reference-project review (one Bun crash mid-fetch — no cost incurred for the failed run). Most spend was Opus cache writes for the long, multi-turn research / design / logging context. The session was unusually decision-heavy (Step 4 design reversal documented in Entries 041–046) and unusually documentation-heavy (logging the reversal in detail per the user's request for thesis traceability) — meaning $5.10 reflects deliberation + recordkeeping more than typical implementation work.
 
 ---
 

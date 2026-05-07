@@ -864,4 +864,26 @@
 
 ---
 
+### Entry 066
+- **Date:** 2026-05-07
+- **Prompt summary:** "okay wait sorry what was i testing in the emulator? i lost trac" — user momentarily lost context after the long stretch of logging-discipline back-fill work.
+- **My response summary:** Brief refresher: they were testing the BUG-005 fix. Re-issued the focused test plan (relaunch app on `step-5-live-data` branch, leave the existing line 3 → Karolinska commute, wait one polling cycle, look at the bottom black bar + Logcat filtered to `LiveTracking`). Restated the expected before/after deltas: `direction.headsign` should now be populated instead of empty, `tripIds` should drop roughly in half, vehicle count should drop to ~3 instead of 6.
+- **Agreement:** N/A (process / orientation only).
+- **Plan revised after:** No.
+- **User feedback:** *(pending)*
+- **Satisfaction:** —
+
+---
+
+### Entry 067
+- **Date:** 2026-05-07
+- **Prompt summary:** User pasted Logcat from a fresh run testing line 57 → Sofia (different commute than the line 3 they had earlier). Logs show: `matched designation=57 routeId=9011001005700000 routeType=700 -> direction.headsign='Motalavägen' (config wanted 'Sofia'), tripIds=281` and `4 match our 281-tripId filter`.
+- **My response summary:** **BUG-005 fix is partially confirmed.** The `direction.headsign` is no longer empty — it's `'Motalavägen'`, populated from the trip's final-stop name as designed. But this run surfaced a NEW bug: SL Transport API's `direction` label (what the user picked: "Sofia") and GTFS's final-stop headsign (what we now have: "Motalavägen") are **different strings for the same physical direction**. SL Transport labels the direction by an intermediate destination shown on the bus's destination sign; GTFS labels it by the literal final stop. So our `matchDirection` exact/contains/reverse-contains chain can't reconcile "Sofia" against "Motalavägen", and we fell back to first-direction. The 4 vehicles tracked are real bus 57 vehicles, but possibly the wrong half (going *away* from Sofia rather than *toward*). Diagnosed root cause by reading the existing data flow: `StopLineOption` already carries `directionCode: Int` from SL Transport (which is GTFS-standard `direction_id`, 0 or 1) and `DepartureDto` already exposes it via `@SerializedName("direction_code")`. We have a clean ID match available — we're just throwing it away in the bottom-sheet save flow. Surfaced two paths to the user via AskUserQuestion: (a) fix now by adding `directionCode: Int?` to `CommuteConfig`, saving it in the bottom sheet, and matching by direction_id in `SlLineRepository` (deterministic, ~30 LOC), (b) wrap Step 5 with the limitation noted, fix during Step 6 polish. Logging this in BUGS.md as BUG-009 ("SL Transport direction label ≠ GTFS final-stop headsign").
+- **Agreement:** *(pending — AskUserQuestion submitted)*
+- **Plan revised after:** No (yet).
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** Manual test outcome: BUG-005 fix **worked first time** for the headsign-population part (no longer empty), but **needed iteration** for full direction correctness because the headsign that's populated doesn't always match what SL Transport's bottom-sheet UI shows. Discovery was clean and quick (one Logcat line confirmed the issue).
+
+---
+
 *New entries appended below as the project progresses.*

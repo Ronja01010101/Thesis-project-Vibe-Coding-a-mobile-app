@@ -941,4 +941,15 @@
 
 ---
 
+### Entry 073
+- **Date:** 2026-05-07
+- **Prompt summary:** "So, moving forward i dont want to keep guessing on the API. Always check the documentation for it when dealing with the live data. there is documentation for all API keys we have currently." User pasted Logcat from latest run: `direction_id=1 headsign='Tengdahlsgatan' (config: directionCode=2, direction='Sofia'), tripIds=288` — same direction_id and tripIds count as the v2 (code-1 heuristic) run.
+- **My response summary:** Added new permanent CLAUDE.md rule: when dealing with live-data APIs (Trafiklab SL Transport, GTFS Realtime, GTFS Static, SL Deviations, SL Journey Planner), always consult the official documentation before guessing about field semantics, value ranges, ID schemes, or behaviour. Use WebFetch on the trafiklab.se docs site or the OpenAPI specs in trafiklab/openApi-docs / trafiklab/trafiklab.se GitHub repos. If the docs are silent, say so explicitly to the user before applying a heuristic — don't paper over the gap. Heuristics are only acceptable as fallbacks when the docs confirm "we don't guarantee X". Cited BUG-009's three-version fix arc as the load-bearing example for why this rule exists. Also: log result is ambiguous (could be stop-sequence match returning direction_id=1, or fallthrough to directionCode heuristic also returning direction_id=1). Added `stopName` to the LivePositionTracker Log.d output so the next run shows whether stopName is populated (= user re-saved post-v3, stop-sequence path likely active) or null (= legacy save, fell through to heuristic). Build clean.
+- **Agreement:** Implicit — rule added.
+- **Plan revised after:** Yes — CLAUDE.md updated with documentation-first rule. Process change for thesis-traceability.
+- **User feedback:** *(pending)*
+- **Satisfaction:** Manual test outcome (of v3): inconclusive without stopName log. **Pending one more iteration** (rebuild, delete + re-save, retest with new diagnostic). Two-bug-fix iterations turned into a 3-version fix arc + a documentation rule update — thesis-relevant pattern: AI-assisted dev needs explicit "check the docs" rules to avoid heuristic drift.
+
+---
+
 *New entries appended below as the project progresses.*

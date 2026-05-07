@@ -79,7 +79,7 @@ class LivePositionTracker(
             return
         }
         val (line, direction) = pair
-        Log.d(TAG, "matched designation=$designation routeId=${line.routeId} routeType=${line.routeType} -> direction_id=${direction.directionId} headsign='${direction.headsign}' (config: directionCode=${active.directionCode}, direction='${active.direction}'), tripIds=${direction.tripIds.size}")
+        Log.d(TAG, "matched designation=$designation routeId=${line.routeId} routeType=${line.routeType} -> direction_id=${direction.directionId} headsign='${direction.headsign}' (config: stopName='${active.stopName}', directionCode=${active.directionCode}, direction='${active.direction}'), tripIds=${direction.tripIds.size}")
         if (direction.tripIds.isEmpty()) {
             _state.value = TrackingState.Error("No trip_ids for line $designation toward ${direction.headsign}.")
             return

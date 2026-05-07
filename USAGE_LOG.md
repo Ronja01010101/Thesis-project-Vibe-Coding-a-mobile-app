@@ -108,6 +108,56 @@
 
 ---
 
+### Day Recap — 2026-05-07 (the big build day)
+
+**Wall time:** ~9h 34m across **6 local sessions** (Steps 4a, 4b, 5, 6, 7 plus their respective runtime test cycles and planning-file updates). Most of the wall time was the user driving the emulator + reading Logcat between my responses; actual API time was a fraction of that — Step 7 alone was 2h 41m wall vs 31m API.
+
+**Cost:** **$78.89** total. Per-step trajectory:
+
+| Step | Cost | Wall | $/min wall |
+|---|---|---|---|
+| Step 4a (build-time GTFS extraction) | folded into Checkpoint 3 | — | — |
+| Step 4b (render lines + OOM hotfix) | folded into Checkpoint 3 | — | — |
+| Step 5 (live vehicle data — first new-API integration) | $30.90 | 3h 22m | $0.15 |
+| Step 6 (vehicles on map + 4-bug polish) | $11.09 | 1h 28m | $0.13 |
+| Step 7 (SL Deviations API + warning bar + (!) badges) | $13.58 | 2h 41m | $0.084 |
+
+**Cost-per-minute compression** is the headline trend across Steps 5→6→7 — same scaffolding reused, fewer heuristic-drift iterations, same scope-clarification loop tightened. Worth tracking whether Step 8's foreground-service + widget complexity holds the trend or breaks it (different process model = less scaffolding reuse).
+
+**What got built:**
+- ✅ Build-time GTFS extraction pipeline (49 MB Trafiklab zip → 15 MB compact JSON shipped in `app/src/main/assets/`)
+- ✅ Real route geometry + stop sequences rendered as coloured polylines + filled-circle stop markers, per saved commute, 5-colour palette cycle
+- ✅ Live vehicle position polling (GTFS Realtime, 20 s cadence, foreground+active-window gated)
+- ✅ Stop-sequence-aware direction matching (the documentation-aligned BUG-009 v3 fix)
+- ✅ Vehicles drawn on the map with bearing rotation, UNCERTAIN greyout, auto-fit camera once per active commute
+- ✅ Map UX polish (small stop dots, zoom threshold gating, custom always-visible zoom buttons, map-tap closes InfoWindow)
+- ✅ SL Deviations API integration (60 s polling, ETag conditional GET, top warning bar + per-marker (!) badge, time-window-aware filter, cross-midnight handling)
+
+**Bug count snapshot:** 12 entries in BUGS.md, 9 fixed (BUG-002, 003, 005, 009, 010, 011 fixed today; 001 and 008 still deferred), 4 deferred (BUG-001 Swedish-character search, BUG-007 30-min commute window cap, BUG-008 polyline overlap, BUG-012 UNCERTAIN threshold tuning).
+
+**Real-world tracking signal:** four distinct commutes thoroughly exercised the multi-line / multi-direction tracking + deviation flow during runtime tests — bus 57 from Tullgårdsparken→Sofia, bus 57 from Mjärdgränd→Hjorthagen, bus 57 from Nätgränd→Hjorthagen, metro 17 from Skanstull→Hässelby strand. Stop-sequence-aware direction matching worked consistently across all four (different `directionCode` values, different SL Transport `direction` strings, different GTFS final-stop names). One real production deviation captured live (case `11100865` on bus 57 at Jungfrugatan).
+
+**Process discipline rules added today:**
+1. Per-prompt USAGE_LOG.md write discipline (added in Step 5 entry 058 / 065 — the rule the rest of this log follows)
+2. Step-transition `/cost` snapshot rule (added in Step 5 entry 065 — fulfilled at end of Steps 5, 6, 7)
+3. Manual-test outcome capture (every runtime test gets "worked first time" / "needed N iterations" + linked bugs/commits)
+4. Decision-path documentation for blockers / disagreements / judgement calls
+5. Always-consult-API-docs rule (added end of Step 5 entry 073 after BUG-009's three-version arc — first ran as primary discipline in Step 7, with measurable cost-curve shift)
+6. Public-repo PII redaction rule (added during Step 7 reviewing planning files for hygiene)
+
+**Memory persistence created today:**
+- `feedback_no_implementation_choices.md` (in earlier session) — non-programmer; surface trade-offs but don't ask to pick named libraries
+- `project_app_scope.md` (Step 7) — pre-trip commute decision support, NOT journey planner; out of scope: anything that only matters after boarding
+
+**% progress toward Phase 1 finished product:**
+- **By step count:** 9 of 12 sub-steps done (Steps 1, 2, 3, 3.5, 4a, 4b, 5, 6, 7) ≈ **75%**
+- **By effort weight:** estimate **~65–70%** done. Step 8 (lockscreen widget + foreground service) alone is probably 20–25% of total Phase 1 effort because of the foreground-service + persistent-notification + RemoteViews-based widget surface — a different process model than what we've built so far. Steps 9–10 (deep link, polish) are lighter.
+- **By spend forecast:** projecting forward from today's $78.89 + estimated $25–40 remaining (Step 8 dominant) → target Phase 1 finish at roughly $105–120 cumulative, ~14–16 h wall total. Estimate carries Step-5-shaped uncertainty (Step 5 broke its budget 3×) so this isn't a hard prediction.
+
+**Next session:** Step 8 — lockscreen widget. Strongly recommend a `/clear` before starting; current session's >150 k context is mostly Step 7 detail that won't help with foreground-service architecture.
+
+---
+
 **Thesis-relevant observations from Step 6:**
 1. **Cost compresses sharply when scaffolding is reused.** Step 6's $11.09 added live vehicle markers + a 4-bug UI polish pass for ~36% of Step 5's spend — but this was only possible because Step 5 had already established the tracker, the `TrackingState` sealed class, the polling loop, the lifecycle gating, the multi-commute palette pattern, and the async polyline loading infrastructure. The cost curve isn't linear with feature count; it's sub-linear when each step builds on solid prior steps.
 2. **The "ship → user runtime tests → small UX issues bundled together" loop costs less than guarding against UX issues up-front.** Step 6 shipped four UX issues in the first runtime test (couldn't-close-popup, big-icons, zoom-controls-overlap, distracting-stops-on-load) and fixed all four in one ~150 LOC commit. If we'd designed up-front to anticipate them (e.g. spent a planning round speculating about what UI rough edges might exist), we'd have spent more tokens on speculation than the actual fix bundle cost.
@@ -1148,6 +1198,17 @@
 - **Plan revised after:** Yes — REQUIREMENTS Step 7 → Done, PLAN.md row added, Checkpoint 6 logged, header reference bumped.
 - **User feedback:** *(pending — user to authorise push and advise on next step)*
 - **Satisfaction:** Step 7 closeout clean. Sub-linear cost trajectory across Steps 5→6→7 noted as a thesis observation. Three commutes on bus 57 + one on metro 17 thoroughly exercised the multi-line / multi-direction tracking + deviation surfacing flow.
+
+---
+
+### Entry 087
+- **Date:** 2026-05-08 (just past midnight; the development push being recapped is the 2026-05-07 day)
+- **Prompt summary:** "yes to both! and quick question, can you calculate how long we've been running today? and where ish we are at in the process in % before finished product?" → I answered (~9h 34m wall, 9 of 12 sub-steps done, ~65–70% by effort-weight, projecting $105–120 / ~14–16 h to Phase 1 done). User: "good observations! add them to the log maybe? just as a fun summary of what we did today."
+- **My response summary:** Pushed Step 7 to `origin/main` (`9be9006..01afb0e`) per earlier authorisation. Added a new "Day Recap — 2026-05-07" section to USAGE_LOG.md (placed right after Checkpoint 6 + thesis observations, before the older per-step observations). The recap captures: wall + cost totals, per-step cost-per-minute trajectory ($0.15 → $0.13 → $0.084), what got built today across Steps 4a–7, bug count snapshot (12 entries / 9 fixed / 4 deferred), the four distinct commutes tested in runtime, the six process-discipline rules added today, the two memory entries persisted, and the % progress forecast (75% by step count, ~65–70% by weight, projected $105–120 / 14–16 h to Phase 1 done with Step-5-shaped uncertainty noted). Tone is fun-summary as user requested while staying thesis-grade. About to commit the recap as a small standalone planning-file commit on `main` (recap is informational only, no code touched).
+- **Agreement:** User explicitly asked for the recap; recap captures the observations from the prior message verbatim where possible.
+- **Plan revised after:** No code changes; documentation only.
+- **User feedback:** *(pending — start next prompt with [[...]])*
+- **Satisfaction:** Recap captures Day-4 well. The "cost-per-minute compression across well-architected steps" trend is the single most thesis-relevant pattern this day surfaced — worth checking whether Step 8 holds it (different process model, less scaffolding reuse) or breaks it.
 
 ---
 

@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">Thesis project</string>
+
+    <!-- Step 8a: foreground service for live commute tracking. Channel + notification
+         text shown to the user while the service is running. IMPORTANCE_MIN keeps the
+         icon out of the user's way. -->
+    <string name="commute_tracking_channel_name">Commute tracking</string>
+    <string name="commute_tracking_channel_description">Updates the commute widget while you\'re inside your saved time window.</string>
+    <string name="commute_tracking_notification_title">Tracking your commute</string>
+    <string name="commute_tracking_notification_text">Live updates running in the background.</string>
 </resources>

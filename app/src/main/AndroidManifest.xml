@@ -5,6 +5,18 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!-- Step 8a: foreground service for live commute tracking off-Activity.
+         FOREGROUND_SERVICE is the base permission (Android 9+). On Android 14+
+         a typed permission matching foregroundServiceType is also required;
+         we use "dataSync" because the service's job is fetching live data
+         from Trafiklab's APIs. POST_NOTIFICATIONS is declared so we can post
+         non-foreground-service notifications later (BUG-013 GPS-trigger
+         waypoint refinement) — the foreground-service notification itself
+         is exempt. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -23,6 +35,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".service.CommuteTrackingService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
 
 </manifest>

@@ -2,6 +2,23 @@ package com.example.thesisproject.model
 
 import java.time.LocalTime
 
+/**
+ * Returns true if [now] falls inside this commute's daily time window. Handles
+ * cross-midnight windows (e.g. 22:00–02:00) by treating them as a wrap-around.
+ * Shared between [com.example.thesisproject.tracking.LivePositionTracker] and
+ * the Step 8a [com.example.thesisproject.service.CommuteTrackingService] so
+ * both agree on window state without duplicating logic.
+ */
+fun CommuteConfig.isInWindow(now: LocalTime): Boolean {
+    val start = timeWindowStart
+    val end = timeWindowEnd
+    return if (!start.isAfter(end)) {
+        !now.isBefore(start) && !now.isAfter(end)
+    } else {
+        !now.isBefore(start) || !now.isAfter(end)
+    }
+}
+
 data class CommuteConfig(
     val stopId: String,
     val lineId: String,

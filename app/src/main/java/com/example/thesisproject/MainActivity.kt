@@ -33,6 +33,8 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.thesisproject.model.CommuteConfig
 import com.example.thesisproject.model.DataQuality
 import com.example.thesisproject.model.Stop
+import com.example.thesisproject.model.isInWindow
+import com.example.thesisproject.service.CommuteTrackingService
 import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.GtfsRealtimeRepository
 import com.example.thesisproject.repository.SlDeviationsRepository
@@ -700,6 +702,15 @@ class MainActivity : AppCompatActivity() {
         super.onResume()
         map.onResume()
         livePositionTracker.start(lifecycleScope)
+        // Step 8a sub-step 2: spin up the foreground service when the user
+        // currently has an active commute window. Service self-stops once
+        // the window closes (one tracker tick later), so we don't have to
+        // manage stop on a window-expiry timer here. If no window is active
+        // right now, we don't start the service — saves the persistent
+        // notification slot until it's actually relevant.
+        if (anyCommuteCurrentlyActive()) {
+            CommuteTrackingService.start(this)
+        }
         // 1-second ticker re-renders the "updated Xs ago" line so the user
         // can see the counter incrementing between polls. The tracker itself
         // only emits a new state every 20s, so without this the text would
@@ -712,6 +723,16 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Whether any saved commute's daily window contains the current local time.
+     * Used as a gate for starting the foreground service; the service itself
+     * checks the same condition on every poll and self-stops when it flips false.
+     */
+    private fun anyCommuteCurrentlyActive(): Boolean {
+        val now = java.time.LocalTime.now()
+        return commuteStore.getAll().any { it.isInWindow(now) }
     }
 
     override fun onPause() {

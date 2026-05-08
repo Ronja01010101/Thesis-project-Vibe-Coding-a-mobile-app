@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.thesisproject.model.CommuteConfig
 import com.example.thesisproject.model.Departure
 import com.example.thesisproject.model.Deviation
+import com.example.thesisproject.model.isInWindow
 import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.GtfsRealtimeRepository
 import com.example.thesisproject.repository.SlDeviationsRepository
@@ -93,7 +94,7 @@ class LivePositionTracker(
 
     private suspend fun pollOnce() {
         val configs = configStore.getAll()
-        val active = configs.firstOrNull { isInWindow(it, clock()) }
+        val active = configs.firstOrNull { it.isInWindow(clock()) }
         if (active == null) {
             // No active commute — drop any cached deviations and next-departure
             // so the next active window starts fresh.
@@ -261,17 +262,6 @@ class LivePositionTracker(
             endToday.toInstant()
         } else {
             endToday.plusDays(1).toInstant()
-        }
-    }
-
-    private fun isInWindow(config: CommuteConfig, now: LocalTime): Boolean {
-        val start = config.timeWindowStart
-        val end = config.timeWindowEnd
-        return if (!start.isAfter(end)) {
-            !now.isBefore(start) && !now.isAfter(end)
-        } else {
-            // Crosses midnight (e.g. 22:00–02:00).
-            !now.isBefore(start) || !now.isAfter(end)
         }
     }
 

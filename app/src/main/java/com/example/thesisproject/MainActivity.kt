@@ -1,5 +1,7 @@
 package com.example.thesisproject
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -9,12 +11,15 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.ShapeDrawable
 import android.graphics.drawable.shapes.OvalShape
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
 import android.util.Log
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -122,6 +127,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deviationDetails: TextView
     private var deviationDetailsExpanded: Boolean = false
 
+    // Step 8a: runtime grant for POST_NOTIFICATIONS (Android 13+). Without it,
+    // foreground-service notifications are hidden even though the service runs.
+    // Result is logged but not surfaced — service does its job either way.
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            Log.d("MainActivity", "POST_NOTIFICATIONS granted=$granted")
+        }
+
     // Step 6: live vehicle markers + auto-fit-camera state.
     // vehicleMarkers are removed and re-added every state emission (small N — usually
     // single-digit count of vehicles per active commute, so the churn is negligible).
@@ -200,10 +213,23 @@ class MainActivity : AppCompatActivity() {
 
         // Listen for the bottom sheet's "commute saved" broadcast so we can
         // redraw the line overlays as soon as a new commute is configured.
+        // Step 8a runtime fix: also re-check whether to start the foreground
+        // tracking service. Saving a commute whose window contains "now" while
+        // the app is already running used to leave the service un-started
+        // because the only check happened in onResume (which had run with
+        // zero saved commutes at launch).
         supportFragmentManager.setFragmentResultListener(
             StopConfigBottomSheet.RESULT_KEY_COMMUTE_SAVED,
             this
-        ) { _, _ -> rebuildCommuteOverlays() }
+        ) { _, _ ->
+            rebuildCommuteOverlays()
+            maybeStartTrackingService()
+        }
+
+        // Step 8a: ask for POST_NOTIFICATIONS permission once on Android 13+
+        // so the foreground-service notification can render. Service runs
+        // either way; this just controls whether the icon is visible.
+        requestPostNotificationsIfNeeded()
 
         // Initial draw — if there are no saved commutes this is a no-op.
         rebuildCommuteOverlays()
@@ -708,9 +734,7 @@ class MainActivity : AppCompatActivity() {
         // manage stop on a window-expiry timer here. If no window is active
         // right now, we don't start the service — saves the persistent
         // notification slot until it's actually relevant.
-        if (anyCommuteCurrentlyActive()) {
-            CommuteTrackingService.start(this)
-        }
+        maybeStartTrackingService()
         // 1-second ticker re-renders the "updated Xs ago" line so the user
         // can see the counter incrementing between polls. The tracker itself
         // only emits a new state every 20s, so without this the text would
@@ -733,6 +757,30 @@ class MainActivity : AppCompatActivity() {
     private fun anyCommuteCurrentlyActive(): Boolean {
         val now = java.time.LocalTime.now()
         return commuteStore.getAll().any { it.isInWindow(now) }
+    }
+
+    /**
+     * Call sites: onResume (app coming to foreground), and the commute_saved
+     * fragment-result handler (commute added/changed during a session). Both
+     * paths need to be able to start the service; the gate only matters for
+     * "is a window currently active" — `CommuteTrackingService.start` is
+     * idempotent so re-calling it on an already-running service is a no-op
+     * beyond a fresh `onStartCommand`.
+     */
+    private fun maybeStartTrackingService() {
+        if (anyCommuteCurrentlyActive()) {
+            CommuteTrackingService.start(this)
+        }
+    }
+
+    private fun requestPostNotificationsIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+        val granted = ContextCompat.checkSelfPermission(
+            this, Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     override fun onPause() {

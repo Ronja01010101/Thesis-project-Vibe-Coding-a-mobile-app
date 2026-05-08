@@ -3,35 +3,49 @@ package com.example.thesisproject.widget
 import com.example.thesisproject.model.DepartureStatus
 import com.example.thesisproject.model.SlDirection
 import com.example.thesisproject.model.SlStop
+import com.example.thesisproject.model.VehiclePosition
 import com.example.thesisproject.tracking.TrackingState
 import com.example.thesisproject.util.GeoMath
 import java.time.Duration
 import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import kotlin.math.abs
+import kotlin.math.ceil
 
 /**
  * Pure derivation: TrackingState + matched direction + clock → WidgetCommuteState.
  * No I/O, no Android types — testable as a plain JVM unit.
  *
- * Step 8a sub-step 1 produces this state and logs it; the widget surface
- * (Step 8b) is where it gets bound to RemoteViews.
+ * The route gauge is **windowed to the last [WINDOW_SIZE] stops ending at
+ * the user's stop** — anything further back the bus's path or after the
+ * user's stop is out of scope per `project_app_scope.md` (decision support
+ * for catching a specific bus at a specific stop, not a journey planner).
  */
 object WidgetStateDeriver {
+
+    /** Maximum stops shown on the route gauge ending at the user's stop. */
+    private const val WINDOW_SIZE = 5
+
+    private val CLOCK_FORMATTER = DateTimeFormatter.ofPattern("HH:mm")
 
     /**
      * Build the widget render state from the current tracker snapshot. Returns
      * null for [TrackingState.Idle] / [TrackingState.Error] — caller substitutes
      * its own placeholder. [TrackingState.NoActiveCommute] returns a Dormant
      * placeholder with the user's stop info empty.
+     *
+     * [nowMs] is used for vehicle-age computation; defaults to the system
+     * wall clock. Caller may pass a fixed value for deterministic tests.
      */
     fun derive(
         state: TrackingState,
         matchedDirection: SlDirection?,
-        now: LocalDateTime = LocalDateTime.now()
+        now: LocalDateTime = LocalDateTime.now(),
+        nowMs: Long = System.currentTimeMillis()
     ): WidgetCommuteState? {
         return when (state) {
             is TrackingState.NoActiveCommute -> dormantPlaceholder()
-            is TrackingState.Polling -> derivePolling(state, matchedDirection, now)
+            is TrackingState.Polling -> derivePolling(state, matchedDirection, now, nowMs)
             else -> null
         }
     }
@@ -39,7 +53,8 @@ object WidgetStateDeriver {
     private fun derivePolling(
         state: TrackingState.Polling,
         direction: SlDirection?,
-        now: LocalDateTime
+        now: LocalDateTime,
+        nowMs: Long
     ): WidgetCommuteState {
         val cfg = state.activeCommute
         val stops = direction?.stops.orEmpty()
@@ -52,20 +67,55 @@ object WidgetStateDeriver {
             stops.indexOfFirst { it.name.equals(name, ignoreCase = true) }
         }?.takeIf { it >= 0 } ?: 0
 
-        // Vehicle lock for sub-step 1: pick the vehicle that's at-or-before the
-        // user's stop and closest to arriving (= largest busIndex ≤ userStopIndex).
-        // If every tracked vehicle is already past the user's stop, fall back
-        // to the smallest busIndex (= the next bus that'll eventually reach
-        // the user). Sub-step 2 will pin a single vehicle for the whole window.
-        val busIndex = pickLockedBusIndex(state.vehicles, stops, userStopIndex)
+        // Compute the visible window: at most WINDOW_SIZE stops ending at
+        // the user's stop. Shorter when user's stop is near the start of
+        // the route (e.g. only 2 stops before — gauge shows 3 dots total).
+        val windowStart = maxOf(0, userStopIndex - (WINDOW_SIZE - 1))
+        val visibleStopCount = if (stops.isEmpty()) 0 else userStopIndex - windowStart + 1
+        val visibleStartStopName = stops.getOrNull(windowStart)?.name.orEmpty()
 
-        val etaMin = state.nextDeparture?.let { dep ->
+        // Project bus position into the visible window. Out-of-window bus
+        // positions yield null + a stops-away count for the off-gauge
+        // indicator. Any bus past the user's stop is out of scope (Phase.Passed
+        // takes over) and yields null + null.
+        val locked = pickLockedVehicle(state.vehicles, stops, userStopIndex)
+        val rawBusIndex = locked?.second
+        // timestampMs == 0L is the sentinel for "SL didn't report GPS time"
+        // (per GtfsRealtimeRepository). Pass through the raw epoch ms when
+        // known; the renderer feeds it to a Chronometer that ticks "Updated
+        // MM:SS ago" every second inside the launcher's process. When
+        // unknown, the renderer hides the GPS-age line entirely.
+        val vehicleTimestampMs: Long? = locked?.first?.timestampMs?.takeIf { it > 0L }
+        val visibleBusIndex: Float?
+        val stopsAwayFromUser: Int?
+        if (rawBusIndex == null || visibleStopCount == 0) {
+            visibleBusIndex = null
+            stopsAwayFromUser = null
+        } else if (rawBusIndex < windowStart) {
+            visibleBusIndex = null
+            stopsAwayFromUser = ceil(userStopIndex - rawBusIndex.toDouble()).toInt().coerceAtLeast(1)
+        } else if (rawBusIndex > userStopIndex) {
+            visibleBusIndex = null
+            stopsAwayFromUser = null
+        } else {
+            visibleBusIndex = (rawBusIndex - windowStart).coerceIn(0f, (visibleStopCount - 1).toFloat())
+            stopsAwayFromUser = null
+        }
+
+        val nextDep = state.nextDeparture
+        val etaMin = nextDep?.let { dep ->
             val target = dep.estimatedTime ?: dep.scheduledTime
             Duration.between(now, target).toMinutes().toInt()
         }
-        val deltaMin = state.nextDeparture?.let { dep ->
+        val deltaMin = nextDep?.let { dep ->
             dep.estimatedTime?.let { Duration.between(dep.scheduledTime, it).toMinutes().toInt() }
         }
+
+        // Clock-time strings for the header. Estimated only shown when it
+        // differs from scheduled — same value twice would just clutter.
+        val scheduledClock = nextDep?.scheduledTime?.format(CLOCK_FORMATTER)
+        val estimatedClock = nextDep?.estimatedTime?.format(CLOCK_FORMATTER)
+            ?.takeIf { it != scheduledClock }
 
         val deviationSummary = state.deviations
             .takeIf { it.isNotEmpty() }
@@ -77,7 +127,7 @@ object WidgetStateDeriver {
                 )
             }
 
-        val isCancelled = state.nextDeparture?.status == DepartureStatus.CANCELLED
+        val isCancelled = nextDep?.status == DepartureStatus.CANCELLED
         val phase = computePhase(
             etaMin = etaMin,
             deltaMin = deltaMin,
@@ -89,26 +139,47 @@ object WidgetStateDeriver {
             lineDesignation = cfg.lineDesignation?.takeIf { it.isNotBlank() } ?: cfg.lineId,
             direction = cfg.direction,
             stopName = cfg.stopName.orEmpty(),
-            stopCount = stops.size,
-            userStopIndex = userStopIndex,
-            busIndex = busIndex,
+            visibleStopCount = visibleStopCount,
+            visibleBusIndex = visibleBusIndex,
+            stopsAwayFromUser = stopsAwayFromUser,
+            visibleStartStopName = visibleStartStopName,
             etaMinutes = etaMin,
             deltaMinutes = deltaMin,
             deviation = deviationSummary,
-            phase = phase
+            phase = phase,
+            scheduledClockTime = scheduledClock,
+            estimatedClockTime = estimatedClock,
+            vehicleTimestampMs = vehicleTimestampMs
         )
     }
 
-    private fun pickLockedBusIndex(
-        vehicles: List<com.example.thesisproject.model.VehiclePosition>,
+    /**
+     * Pick the most relevant bus to "lock onto" from the matched direction's
+     * tracked vehicles, returning both the [VehiclePosition] (so callers can
+     * read its [VehiclePosition.timestampMs] for GPS-age display) and its
+     * computed busIndex.
+     *
+     * Heuristic: the vehicle whose busIndex is largest while still
+     * ≤ userStopIndex (= the bus that's about to reach the user). If every
+     * vehicle is already past, fall back to the smallest busIndex (= the
+     * next one that'll come). null when no vehicles tracked.
+     */
+    private fun pickLockedVehicle(
+        vehicles: List<VehiclePosition>,
         stops: List<SlStop>,
         userStopIndex: Int
-    ): Float? {
+    ): Pair<VehiclePosition, Float>? {
         if (vehicles.isEmpty() || stops.size < 2) return null
-        val perVehicle = vehicles.mapNotNull { v -> computeBusIndex(v.lat, v.lon, stops) }
+        val perVehicle = vehicles.mapNotNull { v ->
+            computeBusIndex(v.lat, v.lon, stops)?.let { v to it }
+        }
         if (perVehicle.isEmpty()) return null
-        val approaching = perVehicle.filter { it <= userStopIndex.toFloat() }
-        return if (approaching.isNotEmpty()) approaching.max() else perVehicle.min()
+        val approaching = perVehicle.filter { it.second <= userStopIndex.toFloat() }
+        return if (approaching.isNotEmpty()) {
+            approaching.maxByOrNull { it.second }
+        } else {
+            perVehicle.minByOrNull { it.second }
+        }
     }
 
     /**
@@ -166,13 +237,17 @@ object WidgetStateDeriver {
             lineDesignation = "—",
             direction = "",
             stopName = "",
-            stopCount = 0,
-            userStopIndex = 0,
-            busIndex = null,
+            visibleStopCount = 0,
+            visibleBusIndex = null,
+            stopsAwayFromUser = null,
+            visibleStartStopName = "",
             etaMinutes = null,
             deltaMinutes = null,
             deviation = null,
-            phase = Phase.Dormant
+            phase = Phase.Dormant,
+            scheduledClockTime = null,
+            estimatedClockTime = null,
+            vehicleTimestampMs = null
         )
     }
 }

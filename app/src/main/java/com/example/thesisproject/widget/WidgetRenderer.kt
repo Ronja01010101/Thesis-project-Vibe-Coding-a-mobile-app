@@ -48,15 +48,10 @@ object WidgetRenderer {
                 }
             }
         )
-        // Header right slot: scheduled clock time only, prefixed with "Sched"
-        // so the number isn't bare. The predicted clock time is intentionally
-        // NOT shown here — the hero ETA's countdown ("19 min") already encodes
-        // it (estimated = now + countdown), and the delta line ("+1' late")
-        // already encodes the gap. Showing scheduled→estimated as well would
-        // mean the same fact (when the bus arrives) is encoded three ways,
-        // which makes the widget harder to read at a glance.
-        val scheduledHeader = state.scheduledClockTime?.let { "Sched $it" }.orEmpty()
-        views.setTextViewText(R.id.widget_scheduled, scheduledHeader)
+        // Header used to have a right-side scheduled-time slot; that moved
+        // into a labeled caption above the time-scale gauge in the bottom
+        // row, where the schedule-conformance story (timetable → prediction
+        // → conformance gauge → delta) reads as one block.
 
         // --- 2. Route line gauge — Canvas bitmap. ---
         val density = context.resources.displayMetrics.density
@@ -121,8 +116,24 @@ object WidgetRenderer {
             if (heroCaptionVisible) View.VISIBLE else View.GONE
         )
 
-        // --- 5b. Time-scale gauge — Canvas bitmap. ---
+        // --- 5b. Schedule-conformance block: scheduled-arrival caption +
+        // time-scale gauge + delta together tell one story. Caption shows
+        // both clock times when SL's prediction differs from timetable
+        // ("Scheduled arrival: 00:49 → 00:50"), or just the scheduled time
+        // when on schedule. Hidden in Dormant / Passed where there's no
+        // upcoming arrival to describe.
         if (state.phase != Phase.Dormant && state.phase != Phase.Passed) {
+            val scheduledLabelText = state.scheduledClockTime?.let { sched ->
+                state.estimatedClockTime?.let { est -> "Scheduled arrival: $sched → $est" }
+                    ?: "Scheduled arrival: $sched"
+            }
+            if (scheduledLabelText != null) {
+                views.setTextViewText(R.id.widget_scheduled_label, scheduledLabelText)
+                views.setViewVisibility(R.id.widget_scheduled_label, View.VISIBLE)
+            } else {
+                views.setViewVisibility(R.id.widget_scheduled_label, View.GONE)
+            }
+
             val scale = WidgetBitmapRenderer.renderTimeScale(
                 context = context,
                 widthPx = (TIME_SCALE_DP_WIDTH * density).toInt(),
@@ -132,16 +143,20 @@ object WidgetRenderer {
             views.setImageViewBitmap(R.id.widget_time_scale, scale)
             views.setViewVisibility(R.id.widget_time_scale, View.VISIBLE)
         } else {
+            views.setViewVisibility(R.id.widget_scheduled_label, View.GONE)
             views.setViewVisibility(R.id.widget_time_scale, View.INVISIBLE)
         }
 
-        // --- 5c. Delta label (no GPS-age suffix anymore — that's its own row). ---
+        // --- 5c. Delta label — natural-language schedule conformance.
+        // "+5 min late" / "2 min early" (absolute value, "early" carries the
+        // sign) / "on time". Drops the previous prime-symbol suffix (which
+        // is technically the arc-minute glyph, not a time-minute marker).
         val deltaText = when {
             state.phase == Phase.Dormant -> "off-window"
             state.phase == Phase.Passed -> ""
             state.deltaMinutes == null -> ""
-            state.deltaMinutes >= 1 -> "+${state.deltaMinutes}′ late"
-            state.deltaMinutes <= -1 -> "${state.deltaMinutes}′ early"
+            state.deltaMinutes >= 1 -> "+${state.deltaMinutes} min late"
+            state.deltaMinutes <= -1 -> "${-state.deltaMinutes} min early"
             else -> "on time"
         }
         views.setTextViewText(R.id.widget_delta, deltaText)
@@ -196,7 +211,6 @@ object WidgetRenderer {
             directionLabel?.takeIf { it.isNotBlank() }?.let { "→ $it" }
                 ?: context.getString(R.string.widget_dormant_destination)
         )
-        views.setTextViewText(R.id.widget_scheduled, "")
         views.setTextViewText(R.id.widget_eta, context.getString(R.string.widget_placeholder))
         views.setTextViewText(R.id.widget_delta, "off-window")
         views.setTextViewText(R.id.widget_first_stop, "")
@@ -204,6 +218,7 @@ object WidgetRenderer {
         views.setViewVisibility(R.id.widget_user_stop, View.GONE)
         views.setViewVisibility(R.id.widget_route, View.INVISIBLE)
         views.setViewVisibility(R.id.widget_time_scale, View.INVISIBLE)
+        views.setViewVisibility(R.id.widget_scheduled_label, View.GONE)
         views.setViewVisibility(R.id.widget_hero_label, View.GONE)
         views.setViewVisibility(R.id.widget_stops_away, View.GONE)
         views.setViewVisibility(R.id.widget_gps_age, View.GONE)

@@ -28,7 +28,11 @@
     android:padding="10dp"
     android:background="#1E1E1E">
 
-    <!-- 1. Header row. -->
+    <!-- 1. Header row — line badge + destination only. The scheduled-clock
+         info that previously lived in a header right slot moved into a
+         labeled caption above the time-scale gauge, where the schedule-
+         conformance story (scheduled→predicted, scale gauge, delta) reads
+         as one connected block instead of three scattered numbers. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -61,16 +65,6 @@
             android:singleLine="true"
             android:ellipsize="end"
             android:text="→ off-window"
-            tools:ignore="HardcodedText" />
-
-        <TextView
-            android:id="@+id/widget_scheduled"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="11sp"
-            android:textColor="#9E9E9E"
-            android:fontFamily="monospace"
-            android:text=""
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
@@ -135,7 +129,9 @@
         android:text=""
         tools:ignore="HardcodedText" />
 
-    <!-- 5. Bottom row — hero block on left (caption + ETA stacked), time-scale + delta on right. -->
+    <!-- 5. Bottom row — hero on left (caption + ETA stacked), schedule-
+         conformance block on right (scheduled-arrival caption + scale
+         gauge + delta). Both sides are vertical stacks for visual symmetry. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -144,6 +140,7 @@
         android:gravity="center_vertical"
         android:layout_marginTop="4dp">
 
+        <!-- Left: hero caption + ETA. -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
@@ -171,23 +168,50 @@
                 tools:ignore="HardcodedText" />
         </LinearLayout>
 
-        <ImageView
-            android:id="@+id/widget_time_scale"
-            android:layout_width="68dp"
-            android:layout_height="20dp"
-            android:layout_marginEnd="6dp"
-            android:scaleType="fitXY"
-            android:contentDescription="@string/widget_time_scale_content_description" />
-
-        <TextView
-            android:id="@+id/widget_delta"
+        <!-- Right: scheduled-arrival caption + (scale gauge + delta). -->
+        <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
-            android:textColor="#BDBDBD"
-            android:singleLine="true"
-            android:text=""
-            tools:ignore="HardcodedText" />
+            android:orientation="vertical"
+            android:gravity="end">
+
+            <TextView
+                android:id="@+id/widget_scheduled_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:visibility="gone"
+                android:textSize="10sp"
+                android:textColor="#9E9E9E"
+                android:singleLine="true"
+                android:text=""
+                tools:ignore="HardcodedText" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="2dp">
+
+                <ImageView
+                    android:id="@+id/widget_time_scale"
+                    android:layout_width="68dp"
+                    android:layout_height="20dp"
+                    android:layout_marginEnd="6dp"
+                    android:scaleType="fitXY"
+                    android:contentDescription="@string/widget_time_scale_content_description" />
+
+                <TextView
+                    android:id="@+id/widget_delta"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="12sp"
+                    android:textColor="#BDBDBD"
+                    android:singleLine="true"
+                    android:text=""
+                    tools:ignore="HardcodedText" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 
     <!-- 6. GPS-age caption (Chronometer auto-ticks every second inside the

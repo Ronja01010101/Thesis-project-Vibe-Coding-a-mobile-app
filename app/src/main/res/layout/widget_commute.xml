@@ -1,19 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Step 8b sub-step 2: text + Canvas-rendered gauges.
+    Step 8b sub-step 2.7: dark-mode-first widget with descriptive captions.
 
-    Visual hierarchy from the design handoff (top to bottom):
-      1. Header row — line badge, arrow, destination, scheduled time slot
-      2. Route line — Canvas-rendered bitmap (stops + user-stop dot + bus marker)
-      3. Stop labels — first stop, user's stop bold with star, last stop
-      4. Bottom row — hero ETA, time-scale gauge bitmap, delta label
-      5. Deviation pill — full-width amber bar; GONE when no deviation applies
+    Visual hierarchy:
+      1. Header — line badge, → direction · from user stop, scheduled→estimated
+      2. Route gauge bitmap — windowed (last 5 stops + user stop)
+      3. Stop labels — leftmost-visible | ★ user stop
+      4. Stops-away caption (conditional) — "Bus is 6 stops away"
+      5. Bottom row — left: "Estimated arrival" caption + hero ETA stacked;
+                       right: time-scale gauge + delta label
+      6. GPS age caption (conditional) — "Bus position · 12s ago"
+      7. Deviation pill (conditional)
 
-    RemoteViews supports a limited set of view types — TextView, ImageView,
-    Button, FrameLayout, LinearLayout, RelativeLayout, GridLayout, ListView,
-    ProgressBar. No CardView / ConstraintLayout.
+    Colours are hardcoded for dark mode (BUG-020 deferred). Light-mode
+    support is filed as a low-priority refinement to be revisited in
+    Step 10 polish.
 
-    Tap anywhere on the widget root opens MainActivity (covers half of P1-FR11).
+    RemoteViews supports basic LinearLayout / TextView / ImageView; no
+    ConstraintLayout / CardView. Tap anywhere on the root opens MainActivity.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -22,7 +26,7 @@
     android:layout_height="match_parent"
     android:orientation="vertical"
     android:padding="10dp"
-    android:background="?android:attr/colorBackground">
+    android:background="#1E1E1E">
 
     <!-- 1. Header row. -->
     <LinearLayout
@@ -53,7 +57,7 @@
             android:layout_weight="1"
             android:layout_marginStart="6dp"
             android:textSize="13sp"
-            android:textColor="?android:attr/textColorPrimary"
+            android:textColor="#E0E0E0"
             android:singleLine="true"
             android:ellipsize="end"
             android:text="→ off-window"
@@ -64,25 +68,22 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="11sp"
-            android:textColor="?android:attr/textColorSecondary"
+            android:textColor="#9E9E9E"
             android:fontFamily="monospace"
             android:text=""
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
-    <!-- 2. Route line — Canvas bitmap. ~24dp tall; ImageView scales to fit. -->
+    <!-- 2. Route line — Canvas bitmap. -->
     <ImageView
         android:id="@+id/widget_route"
         android:layout_width="match_parent"
-        android:layout_height="24dp"
+        android:layout_height="22dp"
         android:layout_marginTop="6dp"
         android:scaleType="fitXY"
         android:contentDescription="@string/widget_route_content_description" />
 
-    <!-- 3. Stop labels — small text under the route line. The gauge ends
-         at the user's stop (rightmost), so the right-side label was the
-         post-user terminus, which is out of scope per project_app_scope.md.
-         Now: leftmost-visible-stop on the left + ★ user stop on the right. -->
+    <!-- 3. Stop labels — leftmost-visible + ★ user stop. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -96,7 +97,7 @@
             android:layout_weight="1"
             android:gravity="start"
             android:textSize="10sp"
-            android:textColor="?android:attr/textColorSecondary"
+            android:textColor="#9E9E9E"
             android:singleLine="true"
             android:ellipsize="end"
             android:text=""
@@ -110,7 +111,7 @@
             android:gravity="end"
             android:textSize="10sp"
             android:textStyle="bold"
-            android:textColor="?android:attr/textColorPrimary"
+            android:textColor="#FFFFFF"
             android:singleLine="true"
             android:ellipsize="end"
             android:layout_marginStart="6dp"
@@ -118,7 +119,21 @@
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
-    <!-- 4. Bottom row — hero ETA + time-scale + delta label. -->
+    <!-- 4. Stops-away caption (visible only when bus is out of the 5-stop window). -->
+    <TextView
+        android:id="@+id/widget_stops_away"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:layout_marginTop="3dp"
+        android:textSize="11sp"
+        android:textColor="#FFB74D"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:text=""
+        tools:ignore="HardcodedText" />
+
+    <!-- 5. Bottom row — hero block on left (caption + ETA stacked), time-scale + delta on right. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -127,22 +142,36 @@
         android:gravity="center_vertical"
         android:layout_marginTop="4dp">
 
-        <TextView
-            android:id="@+id/widget_eta"
+        <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textSize="28sp"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorPrimary"
-            android:singleLine="true"
-            android:ellipsize="end"
-            android:text="—"
-            tools:ignore="HardcodedText" />
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/widget_hero_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="10sp"
+                android:textColor="#9E9E9E"
+                android:text="@string/widget_hero_label" />
+
+            <TextView
+                android:id="@+id/widget_eta"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:textColor="#FFFFFF"
+                android:singleLine="true"
+                android:ellipsize="end"
+                android:text="—"
+                tools:ignore="HardcodedText" />
+        </LinearLayout>
 
         <ImageView
             android:id="@+id/widget_time_scale"
-            android:layout_width="72dp"
+            android:layout_width="68dp"
             android:layout_height="20dp"
             android:layout_marginEnd="6dp"
             android:scaleType="fitXY"
@@ -153,13 +182,27 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textSize="12sp"
-            android:textColor="?android:attr/textColorSecondary"
+            android:textColor="#BDBDBD"
             android:singleLine="true"
             android:text=""
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
-    <!-- 5. Deviation pill — visible when state.deviation != null. -->
+    <!-- 6. GPS-age caption (visible only when SL reports a real GPS timestamp). -->
+    <TextView
+        android:id="@+id/widget_gps_age"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:layout_marginTop="2dp"
+        android:gravity="end"
+        android:textSize="10sp"
+        android:textColor="#9E9E9E"
+        android:singleLine="true"
+        android:text=""
+        tools:ignore="HardcodedText" />
+
+    <!-- 7. Deviation pill — full-width amber bar; GONE when no deviation. -->
     <TextView
         android:id="@+id/widget_deviation"
         android:layout_width="match_parent"

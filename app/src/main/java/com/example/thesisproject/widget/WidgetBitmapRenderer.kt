@@ -5,7 +5,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.RectF
 import android.graphics.Typeface
 import kotlin.math.absoluteValue
 import kotlin.math.max
@@ -125,59 +124,11 @@ object WidgetBitmapRenderer {
             canvas.drawText(text, busX, textY, textPaint)
         }
 
-        // Off-gauge indicator: "← N stops" chip at upper-left when the bus
-        // is out of the visible window. Uses the bus's phase colour to
-        // remain visually consistent with where the bus would have been.
-        val stopsAway = state.stopsAwayFromUser
-        if (visibleBus == null && stopsAway != null && state.phase != Phase.Passed) {
-            drawStopsAwayChip(
-                canvas = canvas,
-                density = density,
-                xLeft = density * 2f,
-                yMid = midY,
-                stopsAway = stopsAway,
-                lineDesignation = state.lineDesignation,
-                phase = state.phase
-            )
-        }
-
+        // Off-gauge case: the route gauge stays empty (no bus marker). The
+        // "Bus is N stops away" hint goes in a dedicated TextView in the
+        // layout (widget_stops_away) — keeps the gauge a clean indicator of
+        // "where on the route my stop is" without competing visual chips.
         return bitmap
-    }
-
-    private fun drawStopsAwayChip(
-        canvas: Canvas,
-        density: Float,
-        xLeft: Float,
-        yMid: Float,
-        stopsAway: Int,
-        lineDesignation: String,
-        phase: Phase
-    ) {
-        val text = "${lineDesignation.takeIf { it.isNotBlank() } ?: "?"} ←$stopsAway"
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            textSize = density * 10f
-            typeface = Typeface.DEFAULT_BOLD
-            textAlign = Paint.Align.LEFT
-        }
-        val padHoriz = density * 6f
-        val padVert = density * 3f
-        val textWidth = textPaint.measureText(text)
-        val chipWidth = textWidth + 2 * padHoriz
-        val chipHeight = (textPaint.descent() - textPaint.ascent()) + 2 * padVert
-        val chipRect = RectF(
-            xLeft,
-            yMid - chipHeight / 2,
-            xLeft + chipWidth,
-            yMid + chipHeight / 2
-        )
-        val chipFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = busColorFor(phase)
-            style = Paint.Style.FILL
-        }
-        canvas.drawRoundRect(chipRect, density * 6f, density * 6f, chipFill)
-        val textY = yMid - (textPaint.descent() + textPaint.ascent()) / 2f
-        canvas.drawText(text, xLeft + padHoriz, textY, textPaint)
     }
 
     /**

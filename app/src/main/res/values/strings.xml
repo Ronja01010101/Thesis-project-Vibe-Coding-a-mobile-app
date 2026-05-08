@@ -17,4 +17,5 @@
     <string name="widget_route_content_description">Route line showing stops, your stop, and current bus position</string>
     <string name="widget_time_scale_content_description">Time scale gauge showing predicted vs scheduled difference</string>
     <string name="widget_user_stop_marker">★</string>
+    <string name="widget_hero_label">Estimated arrival</string>
 </resources>

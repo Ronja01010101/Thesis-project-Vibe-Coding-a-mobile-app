@@ -68,8 +68,16 @@ class GtfsRealtimeRepository(
                 val tripId = v.trip.tripId
                 if (tripId.isNullOrBlank() || tripId !in tripIds) return@mapNotNull null
 
-                val tsMs = if (v.timestamp != 0L) v.timestamp * 1000L else nowMs
-                val ageMs = nowMs - tsMs
+                // SL's GTFS-RT feed often omits vehicle.timestamp. We keep
+                // 0L as a sentinel for "unknown GPS time" so widget code can
+                // suppress the GPS-age display rather than incorrectly showing
+                // "0s ago". Quality calculation still uses the previous
+                // fallback so the existing LIVE/UNCERTAIN visualisation logic
+                // (Steps 5/6) doesn't change behaviour for vehicles without
+                // a reported GPS timestamp.
+                val gpsTimestampMs = if (v.timestamp != 0L) v.timestamp * 1000L else 0L
+                val qualityBasisMs = if (gpsTimestampMs > 0L) gpsTimestampMs else nowMs
+                val ageMs = nowMs - qualityBasisMs
 
                 VehiclePosition(
                     vehicleId = entity.id,
@@ -79,7 +87,7 @@ class GtfsRealtimeRepository(
                     lat = v.position.latitude.toDouble(),
                     lon = v.position.longitude.toDouble(),
                     bearing = if (v.position.hasBearing()) v.position.bearing else null,
-                    timestampMs = tsMs,
+                    timestampMs = gpsTimestampMs,
                     dataSource = DATA_SOURCE,
                     quality = if (ageMs in 0..STALE_THRESHOLD_MS) DataQuality.LIVE else DataQuality.UNCERTAIN
                 )

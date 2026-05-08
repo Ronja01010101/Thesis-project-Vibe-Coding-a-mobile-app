@@ -7,12 +7,11 @@ import com.example.thesisproject.R
 
 /**
  * Pure binding from [WidgetCommuteState] (or no-state Dormant) → [RemoteViews].
- * Sub-step 1 was text-only; sub-step 2 added Canvas-rendered route-line +
- * time-scale gauge bitmaps via [WidgetBitmapRenderer], plus a stop-labels
- * row. Sub-step 2.5 (this revision) windowed the route gauge to the last
- * 5 stops ending at the user's stop, dropped the post-user-stop label
- * (out of scope per project_app_scope.md), and added an off-gauge
- * "← N stops away" indicator baked into the route bitmap.
+ * Sub-step 2.7 visual revision: descriptive captions instead of cryptic
+ * suffixes — "Estimated arrival" caption above the hero number, dedicated
+ * "Bus is N stops away" line when out of window, dedicated "Bus position
+ * Xs ago" GPS-age line. Off-gauge bitmap chip removed in favour of the
+ * dedicated text.
  *
  * Called from two places: the AppWidgetProvider's `onUpdate` (for cold
  * widget updates from the system) AND the foreground service's per-tick
@@ -23,7 +22,7 @@ object WidgetRenderer {
 
     /** Render at a generous bitmap resolution that downscales cleanly. */
     private const val ROUTE_LINE_DP_WIDTH = 320
-    private const val ROUTE_LINE_DP_HEIGHT = 24
+    private const val ROUTE_LINE_DP_HEIGHT = 22
     private const val TIME_SCALE_DP_WIDTH = 80
     private const val TIME_SCALE_DP_HEIGHT = 20
 
@@ -81,7 +80,21 @@ object WidgetRenderer {
             views.setViewVisibility(R.id.widget_user_stop, View.GONE)
         }
 
-        // --- 4. Hero ETA — phase-driven text replacements. ---
+        // --- 4. Stops-away caption — only when bus is out of the visible window. ---
+        val stopsAway = state.stopsAwayFromUser
+        if (stopsAway != null && state.phase != Phase.Passed && state.phase != Phase.Dormant) {
+            views.setTextViewText(
+                R.id.widget_stops_away,
+                "Bus is $stopsAway stop${if (stopsAway == 1) "" else "s"} away"
+            )
+            views.setViewVisibility(R.id.widget_stops_away, View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.widget_stops_away, View.GONE)
+        }
+
+        // --- 5. Hero block (caption + ETA stacked). ---
+        // The "Estimated arrival" caption is a static layout string; we only
+        // need to fill the ETA text + show/hide the caption depending on phase.
         val heroText = when (state.phase) {
             Phase.Dormant -> context.getString(R.string.widget_placeholder)
             Phase.Passed -> "passed"
@@ -89,8 +102,15 @@ object WidgetRenderer {
             else -> state.etaMinutes?.let { "$it min" } ?: context.getString(R.string.widget_placeholder)
         }
         views.setTextViewText(R.id.widget_eta, heroText)
+        // Hide caption for Dormant / Passed since the hero text is the answer
+        // by itself (no "estimated arrival: passed" — just "passed").
+        val heroCaptionVisible = state.phase != Phase.Dormant && state.phase != Phase.Passed
+        views.setViewVisibility(
+            R.id.widget_hero_label,
+            if (heroCaptionVisible) View.VISIBLE else View.GONE
+        )
 
-        // --- 4b. Time-scale gauge — Canvas bitmap. ---
+        // --- 5b. Time-scale gauge — Canvas bitmap. ---
         if (state.phase != Phase.Dormant && state.phase != Phase.Passed) {
             val scale = WidgetBitmapRenderer.renderTimeScale(
                 context = context,
@@ -104,7 +124,7 @@ object WidgetRenderer {
             views.setViewVisibility(R.id.widget_time_scale, View.INVISIBLE)
         }
 
-        // --- 4c. Delta label, with optional GPS-age suffix ---
+        // --- 5c. Delta label (no GPS-age suffix anymore — that's its own row). ---
         val deltaText = when {
             state.phase == Phase.Dormant -> "off-window"
             state.phase == Phase.Passed -> ""
@@ -113,23 +133,24 @@ object WidgetRenderer {
             state.deltaMinutes <= -1 -> "${state.deltaMinutes}′ early"
             else -> "on time"
         }
-        val ageSuffix = state.vehicleAgeSeconds?.takeIf {
-            state.phase != Phase.Dormant && state.phase != Phase.Passed
-        }?.let { age ->
-            when {
-                age < 60 -> "${age}s"
-                age < 600 -> "${age / 60}m"
-                else -> "stale"
-            }
-        }
-        val deltaCombined = when {
-            ageSuffix == null -> deltaText
-            deltaText.isBlank() -> ageSuffix
-            else -> "$deltaText · $ageSuffix"
-        }
-        views.setTextViewText(R.id.widget_delta, deltaCombined)
+        views.setTextViewText(R.id.widget_delta, deltaText)
 
-        // --- 5. Deviation pill ---
+        // --- 6. GPS-age caption — only when we have a real GPS timestamp. ---
+        val gpsAge = state.vehicleAgeSeconds
+            ?.takeIf { state.phase != Phase.Dormant && state.phase != Phase.Passed }
+        if (gpsAge != null) {
+            val ageText = when {
+                gpsAge < 60 -> "${gpsAge}s"
+                gpsAge < 600 -> "${gpsAge / 60}m"
+                else -> ">10m"
+            }
+            views.setTextViewText(R.id.widget_gps_age, "Bus position · $ageText ago")
+            views.setViewVisibility(R.id.widget_gps_age, View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.widget_gps_age, View.GONE)
+        }
+
+        // --- 7. Deviation pill ---
         val deviation = state.deviation
         if (deviation != null) {
             val text = if (deviation.totalCount > 1) {
@@ -165,6 +186,9 @@ object WidgetRenderer {
         views.setViewVisibility(R.id.widget_user_stop, View.GONE)
         views.setViewVisibility(R.id.widget_route, View.INVISIBLE)
         views.setViewVisibility(R.id.widget_time_scale, View.INVISIBLE)
+        views.setViewVisibility(R.id.widget_hero_label, View.GONE)
+        views.setViewVisibility(R.id.widget_stops_away, View.GONE)
+        views.setViewVisibility(R.id.widget_gps_age, View.GONE)
         views.setViewVisibility(R.id.widget_deviation, View.GONE)
     }
 }

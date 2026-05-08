@@ -61,7 +61,7 @@ class StopConfigBottomSheet : BottomSheetDialogFragment() {
             lineOptions = options
             populateSpinner(spinner, options)
         }
-        viewModel.loadLineOptions(stopId)
+        viewModel.loadLineOptions(stopId, stopName)
 
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {

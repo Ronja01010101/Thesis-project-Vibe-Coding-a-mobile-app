@@ -2,8 +2,10 @@ package com.example.thesisproject.repository
 
 import android.content.Context
 import com.example.thesisproject.model.CommuteConfig
+import com.example.thesisproject.model.Line
 import com.example.thesisproject.model.SlDirection
 import com.example.thesisproject.model.SlLineEntry
+import com.example.thesisproject.model.StopLineOption
 import com.google.gson.Gson
 import com.google.gson.stream.JsonReader
 import kotlinx.coroutines.Dispatchers
@@ -32,6 +34,13 @@ class SlLineRepository(private val context: Context) {
 
     @Volatile
     private var cachedMatched: Map<String, List<SlLineEntry>>? = null
+
+    /** Built lazily by [getLineOptionsForStopName] on first call. Maps a
+     *  normalised stop name → all (line, direction) options that serve it
+     *  according to GTFS static. ~21k stops × ~1500 unique line-direction
+     *  pairs deduplicated, ~1–2 MB total. */
+    @Volatile
+    private var cachedStopLineIndex: Map<String, List<StopLineOption>>? = null
 
     suspend fun getMatchedLines(designations: Set<String>): Map<String, List<SlLineEntry>> {
         if (designations.isEmpty()) return emptyMap()
@@ -181,6 +190,128 @@ class SlLineRepository(private val context: Context) {
             "SHIP" -> routeType == 4 || routeType in 1000..1099 || routeType in 1200..1299
             else -> false
         }
+    }
+
+    /**
+     * BUG-024 fix: returns all (line, direction) options that serve the stop
+     * named [stopName], sourced from the bundled GTFS static catalog. Used by
+     * the commute-config line picker to ensure every line that *ever* serves
+     * the stop is selectable, regardless of whether buses are currently
+     * running (which the live SL Transport Departures API requires).
+     *
+     * directionCode is set heuristically as `directionId + 1` (BUG-009 v2):
+     * SL Transport's 1-based codes (1, 2 normal, 0 unknown) line up with
+     * GTFS direction_id (0, 1) under that mapping for two-direction routes.
+     * This is documented as a heuristic — the runtime tracker uses BUG-009
+     * v3's stop-sequence-aware matching as the authoritative direction match,
+     * so a wrong directionCode at picker time gets corrected later.
+     *
+     * Empty list when the stop name doesn't match anything in the catalog
+     * (e.g. brand-new stop, or a name-format mismatch between SL Transport
+     * site names and GTFS stop names — rare, but possible).
+     */
+    suspend fun getLineOptionsForStopName(stopName: String): List<StopLineOption> {
+        if (stopName.isBlank()) return emptyList()
+        val index = getStopLineIndex()
+        val key = stopName.trim().lowercase()
+        index[key]?.let { return it }
+        // Fallback: contains-either-way scan over the keys. Slow (~21k key
+        // comparisons) but rare — only when the SL Transport site name and
+        // GTFS stop name have a format mismatch (e.g. trailing platform
+        // suffix). Acceptable since this is config-time, not hot-path.
+        return index.entries
+            .firstOrNull { (catalogKey, _) ->
+                catalogKey.contains(key) || key.contains(catalogKey)
+            }
+            ?.value
+            .orEmpty()
+    }
+
+    /**
+     * Builds and caches a map from normalised GTFS stop name → list of
+     * [StopLineOption] (one per line × direction that serves the stop).
+     * One full-catalog stream per app lifetime; subsequent calls O(1).
+     *
+     * Memory layout: a small pool of ~1500 unique [Line] objects (one per
+     * line designation) and a small pool of ~3000 unique [StopLineOption]
+     * objects (one per line × direction); the per-stop map values just hold
+     * references into those pools. ~1–2 MB resident total.
+     */
+    private suspend fun getStopLineIndex(): Map<String, List<StopLineOption>> {
+        cachedStopLineIndex?.let { return it }
+        return withContext(Dispatchers.IO) {
+            cachedStopLineIndex?.let { return@withContext it }
+            val gson = Gson()
+            val lineByDesignation = mutableMapOf<String, Line>()
+            val optionByLineDirection = mutableMapOf<Pair<String, Int>, StopLineOption>()
+            val index = mutableMapOf<String, MutableList<StopLineOption>>()
+            context.applicationContext.assets.open(ASSET_NAME).use { stream ->
+                JsonReader(InputStreamReader(stream, StandardCharsets.UTF_8)).use { reader ->
+                    reader.beginObject()
+                    while (reader.hasNext()) {
+                        when (reader.nextName()) {
+                            "lines" -> {
+                                reader.beginArray()
+                                while (reader.hasNext()) {
+                                    val entry: SlLineEntry =
+                                        gson.fromJson(reader, SlLineEntry::class.java)
+                                    val designation = entry.lineDesignation
+                                    val transportMode = transportModeForRouteType(entry.routeType)
+                                    val line = lineByDesignation.getOrPut(designation) {
+                                        Line(
+                                            id = designation.toIntOrNull()?.toString() ?: designation,
+                                            name = designation,
+                                            transportMode = transportMode
+                                        )
+                                    }
+                                    entry.directions.forEach { dir ->
+                                        val key = designation to dir.directionId
+                                        val opt = optionByLineDirection.getOrPut(key) {
+                                            StopLineOption(
+                                                line = line,
+                                                direction = dir.headsign,
+                                                directionCode = dir.directionId + 1
+                                            )
+                                        }
+                                        dir.stops.forEach { stop ->
+                                            if (stop.name.isNotBlank()) {
+                                                val nameKey = stop.name.trim().lowercase()
+                                                index.getOrPut(nameKey) { mutableListOf() }.add(opt)
+                                            }
+                                        }
+                                    }
+                                }
+                                reader.endArray()
+                            }
+                            else -> reader.skipValue()
+                        }
+                    }
+                    reader.endObject()
+                }
+            }
+            // Deduplicate per-stop entries (same line/direction may appear
+            // multiple times when GTFS has multiple platforms with the same
+            // name) and freeze.
+            val frozen: Map<String, List<StopLineOption>> = index.mapValues { (_, list) ->
+                list.distinctBy { it.line.id to it.directionCode }
+            }
+            cachedStopLineIndex = frozen
+            frozen
+        }
+    }
+
+    /**
+     * Inverse of [matchesTransportMode] for indexing. Maps a GTFS route_type
+     * back to the SL Transport API's transport mode string. Falls back to
+     * "BUS" for unknown route types since buses are by far the most common.
+     */
+    private fun transportModeForRouteType(routeType: Int): String = when {
+        routeType == 0 || routeType in 900..999 -> "TRAM"
+        routeType == 1 || routeType in 400..699 -> "METRO"
+        routeType == 2 || routeType in 100..399 -> "TRAIN"
+        routeType == 4 || routeType in 1000..1099 || routeType in 1200..1299 -> "SHIP"
+        routeType == 3 || routeType in 700..799 || routeType == 800 -> "BUS"
+        else -> "BUS"
     }
 
     companion object {

@@ -1385,4 +1385,15 @@
 
 ---
 
+### Entry 102
+- **Date:** 2026-05-08
+- **Prompt summary:** User screenshot of widget showing "Bus is 14 stops away" alongside "Estimated arrival: 9 min". Question: "how can the bus be 14 stops away and that is 8 min estimated arrival time? that sound wayyy to little."
+- **My response summary:** Diagnosed: data is plausibly consistent. Line 57 inner-city Stockholm has stops ~200-400m apart; 14 × ~300m = ~4.2km ≈ ~10 min at urban bus speeds (~25 km/h with stops). 14 stops in 9 min ≈ 38 sec/stop, plausible for the route. **The deeper UX issue:** the wording "stops away" primed user to expect minute-equivalent intuition (linear stops-to-time mapping). Compounded by a real architectural caveat: stops-away comes from GTFS-RT VehiclePositions (live lat/lons) while ETA comes from SL Departures (prediction model) — Trafiklab support has confirmed `journey.id` ≠ GTFS-RT `trip_id` (anti-BUG-009 docstring on `StopRepository.getNextDeparture`), so the tracked bus shown on the gauge isn't necessarily the same physical bus SL predicts to arrive at the user's stop next. Two independent data streams. **Fix shipped (sub-step 2.9):** one-line rephrase from "Bus is N stops away" → "Bus is N stops behind" in `WidgetRenderer`. Code comment captures the rationale + two-stream caveat for future maintainers. Filed **BUG-021** in BUGS.md with the analysis + future-work note (could attempt to link streams via SL's `journey.id` scheduled time → GTFS-RT trip's known scheduled stop_time, but complex and deferred until evidence of recurring confusion). Build verified clean (`./gradlew assembleDebug` → BUILD SUCCESSFUL in 3s, zero debug iterations).
+- **Agreement:** Wording rephrased; explanation provided in response.
+- **Plan revised after:** No PLAN/REQUIREMENTS changes. BUGS.md grew by one entry (BUG-021).
+- **User feedback:** "how can the bus be 14 stops away and that is 8 min estimated arrival time? that sound wayyy to little."
+- **Satisfaction:** Build clean on first try. **Methodologically thesis-relevant:** the user's perception "14 stops vs 9 min sounds wrong" is a reasonable mental model that doesn't match domain truth (urban inner-city bus stops are densely spaced; 38 sec/stop is normal). The fix isn't to change the data — it's to change the **wording so the user's mental model isn't activated incorrectly in the first place**. "Behind" vs "away" is a small lexical choice with a load-bearing UX effect: it reframes the indicator as positional, not temporal, so the user doesn't subconsciously compute "14 × X minutes" and find it impossible. Worth noting in the thesis: when surfacing computed values to users, choose framing that doesn't conflict with their natural intuitions about the unit. Domain experts can read past such phrasings; non-domain-experts can't, and "huh that seems wrong" comments are the user surfacing this misalignment for free.
+
+---
+
 *New entries appended below as the project progresses.*

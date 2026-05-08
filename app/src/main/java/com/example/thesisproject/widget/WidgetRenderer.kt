@@ -81,12 +81,19 @@ object WidgetRenderer {
             views.setViewVisibility(R.id.widget_user_stop, View.GONE)
         }
 
-        // --- 4. Stops-away caption — only when bus is out of the visible window. ---
+        // --- 4. Stops-away caption — only when bus is out of the visible window.
+        // "behind" rather than "away": this is a *positional* indicator (how
+        // many stops back along the route), NOT a remaining-time estimate.
+        // The temporal answer is the hero ETA, which comes from SL Departures'
+        // prediction model — that's the authoritative time-to-arrival source.
+        // (BUG-021: previous wording "stops away" primed users to expect minute-
+        // equivalent intuition, which can mismatch SL's actual prediction
+        // because stop spacing varies along the route.)
         val stopsAway = state.stopsAwayFromUser
         if (stopsAway != null && state.phase != Phase.Passed && state.phase != Phase.Dormant) {
             views.setTextViewText(
                 R.id.widget_stops_away,
-                "Bus is $stopsAway stop${if (stopsAway == 1) "" else "s"} away"
+                "Bus is $stopsAway stop${if (stopsAway == 1) "" else "s"} behind"
             )
             views.setViewVisibility(R.id.widget_stops_away, View.VISIBLE)
         } else {

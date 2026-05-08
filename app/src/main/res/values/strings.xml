@@ -8,4 +8,10 @@
     <string name="commute_tracking_channel_description">Updates the commute widget while you\'re inside your saved time window.</string>
     <string name="commute_tracking_notification_title">Tracking your commute</string>
     <string name="commute_tracking_notification_text">Live updates running in the background.</string>
+
+    <!-- Step 8b: AppWidget config UI + render placeholder strings. -->
+    <string name="widget_config_title">Pick a commute</string>
+    <string name="widget_config_empty">No commutes saved yet. Open the app to add one, then re-add the widget.</string>
+    <string name="widget_dormant_destination">→ off-window</string>
+    <string name="widget_placeholder">—</string>
 </resources>

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Step 8b: AppWidgetProvider metadata for the commute widget.
+
+    minWidth/minHeight match the design handoff's "Compass row" sizing
+    (~360 × 170 dp = 4 × 2 home-screen cells on most launchers).
+
+    `widgetCategory="home_screen"` is the only AOSP-supported value for new
+    widgets (older `keyguard` was removed in Android 5.0). Lock-screen
+    eligibility on Android 16 QPR1+ is opt-OUT — do nothing here, and the
+    OS treats this widget as eligible by default. (See PLAN.md change-log
+    2026-05-08 for the research-agent finding.)
+
+    `configure` points at the activity that picks which CommuteConfig this
+    widget is bound to. Required when the user has multiple saved commutes.
+-->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_commute"
+    android:configure="com.example.thesisproject.widget.WidgetConfigActivity"
+    android:resizeMode="horizontal|vertical"
+    android:widgetCategory="home_screen"
+    android:previewLayout="@layout/widget_commute" />

@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Step 8b sub-step 1: text-only widget layout. Sub-step 2 will add Canvas-
+    rendered route-line and time-scale-gauge bitmaps below the header. For
+    now, the visual hierarchy from the handoff is preserved: header row
+    (line + direction) on top, hero ETA mid, deviation pill at bottom.
+
+    RemoteViews supports a limited set of view types — TextView / ImageView /
+    Button / FrameLayout / LinearLayout / RelativeLayout / GridLayout /
+    ListView / ProgressBar. No CardView or constraint-layout flavours.
+    We use LinearLayout for the simplest possible widget surface.
+
+    Tap anywhere on the widget opens MainActivity (covers P1-FR11 — though
+    Step 9's separate row in the build order is still not formally Done; this
+    counts as the first half of it).
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/widget_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp"
+    android:background="?android:attr/colorBackground">
+
+    <!-- Header row: line + arrow + direction (left), scheduled time (right). -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+
+        <TextView
+            android:id="@+id/widget_line_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:background="#1976D2"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold"
+            android:textSize="14sp"
+            android:text="—"
+            tools:ignore="HardcodedText" />
+
+        <TextView
+            android:id="@+id/widget_destination"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_marginStart="6dp"
+            android:textSize="14sp"
+            android:textColor="?android:attr/textColorPrimary"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text="→ off-window"
+            tools:ignore="HardcodedText" />
+
+        <TextView
+            android:id="@+id/widget_scheduled"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:fontFamily="monospace"
+            android:text=""
+            tools:ignore="HardcodedText" />
+    </LinearLayout>
+
+    <!-- Bottom row: hero ETA (left) + delta-vs-schedule label (right). -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginTop="6dp">
+
+        <TextView
+            android:id="@+id/widget_eta"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textSize="32sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"
+            android:text="—"
+            tools:ignore="HardcodedText" />
+
+        <TextView
+            android:id="@+id/widget_delta"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="14sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:text=""
+            tools:ignore="HardcodedText" />
+    </LinearLayout>
+
+    <!-- Deviation pill: visible when state.deviation != null. -->
+    <TextView
+        android:id="@+id/widget_deviation"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:layout_marginTop="4dp"
+        android:padding="4dp"
+        android:background="#FFB300"
+        android:textColor="#000000"
+        android:textSize="11sp"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:text=""
+        tools:ignore="HardcodedText" />
+</LinearLayout>

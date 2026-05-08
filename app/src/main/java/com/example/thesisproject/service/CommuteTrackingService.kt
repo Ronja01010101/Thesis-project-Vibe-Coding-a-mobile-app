@@ -21,6 +21,8 @@ import com.example.thesisproject.repository.SlLineRepository
 import com.example.thesisproject.repository.StopRepository
 import com.example.thesisproject.tracking.LivePositionTracker
 import com.example.thesisproject.tracking.TrackingState
+import com.example.thesisproject.widget.CommuteAppWidgetProvider
+import com.example.thesisproject.widget.WidgetCommuteIdentity
 import com.example.thesisproject.widget.WidgetStateDeriver
 import com.example.thesisproject.widget.WidgetStateHolder
 import kotlinx.coroutines.CoroutineScope
@@ -103,7 +105,9 @@ class CommuteTrackingService : Service() {
         when (state) {
             is TrackingState.Polling -> {
                 val widgetState = WidgetStateDeriver.derive(state, state.matchedDirection)
-                WidgetStateHolder.update(widgetState)
+                val identity = WidgetCommuteIdentity.from(state.activeCommute)
+                WidgetStateHolder.update(widgetState, identity)
+                CommuteAppWidgetProvider.updateAll(applicationContext)
                 Log.d(
                     TAG,
                     "polling tick: phase=${widgetState?.phase} eta=${widgetState?.etaMinutes}min " +
@@ -115,7 +119,8 @@ class CommuteTrackingService : Service() {
                 // do until another window opens. Stop self; user reopening the
                 // app or adding a widget will start us again.
                 Log.d(TAG, "no active commute; stopping service")
-                WidgetStateHolder.update(WidgetStateDeriver.derive(state, null))
+                WidgetStateHolder.update(WidgetStateDeriver.derive(state, null), null)
+                CommuteAppWidgetProvider.updateAll(applicationContext)
                 stopSelf()
             }
             is TrackingState.Error -> {

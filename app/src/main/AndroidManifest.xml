@@ -40,6 +40,27 @@
             android:name=".service.CommuteTrackingService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Step 8b: AppWidgetProvider receiver + configuration activity. -->
+        <receiver
+            android:name=".widget.CommuteAppWidgetProvider"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_commute_info" />
+        </receiver>
+
+        <activity
+            android:name=".widget.WidgetConfigActivity"
+            android:exported="true"
+            android:theme="@style/Theme.ThesisProject">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
     </application>
 
 </manifest>

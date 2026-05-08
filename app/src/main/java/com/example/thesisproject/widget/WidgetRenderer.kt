@@ -1,6 +1,7 @@
 package com.example.thesisproject.widget
 
 import android.content.Context
+import android.os.SystemClock
 import android.view.View
 import android.widget.RemoteViews
 import com.example.thesisproject.R
@@ -135,16 +136,23 @@ object WidgetRenderer {
         }
         views.setTextViewText(R.id.widget_delta, deltaText)
 
-        // --- 6. GPS-age caption — only when we have a real GPS timestamp. ---
-        val gpsAge = state.vehicleAgeSeconds
+        // --- 6. GPS-age caption — Chronometer auto-ticks "Updated MM:SS ago"
+        // every second inside the launcher's process. We only set the base
+        // when we have a real GPS timestamp from SL; otherwise the line is
+        // hidden. Chronometer.base is in elapsed-realtime-since-boot, not
+        // epoch ms, so we convert: base = elapsedRealtime - (now - tsEpoch).
+        val tsEpochMs = state.vehicleTimestampMs
             ?.takeIf { state.phase != Phase.Dormant && state.phase != Phase.Passed }
-        if (gpsAge != null) {
-            val ageText = when {
-                gpsAge < 60 -> "${gpsAge}s"
-                gpsAge < 600 -> "${gpsAge / 60}m"
-                else -> ">10m"
-            }
-            views.setTextViewText(R.id.widget_gps_age, "Bus position · $ageText ago")
+        if (tsEpochMs != null) {
+            val nowEpochMs = System.currentTimeMillis()
+            val nowElapsed = SystemClock.elapsedRealtime()
+            val elapsedBase = nowElapsed - (nowEpochMs - tsEpochMs)
+            views.setChronometer(
+                R.id.widget_gps_age,
+                elapsedBase,
+                context.getString(R.string.widget_gps_age_format),
+                /* started = */ true
+            )
             views.setViewVisibility(R.id.widget_gps_age, View.VISIBLE)
         } else {
             views.setViewVisibility(R.id.widget_gps_age, View.GONE)

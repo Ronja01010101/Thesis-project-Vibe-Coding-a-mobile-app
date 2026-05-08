@@ -80,11 +80,20 @@ data class WidgetCommuteState(
      */
     val estimatedClockTime: String? = null,
     /**
-     * Seconds since the locked vehicle's last GPS fix (from the GTFS-RT
-     * feed's `vehicle.timestamp`, NOT our poll time — SL's feed lags the
-     * actual GPS by 30–90s per BUG-012). null when no vehicle is tracked.
+     * Epoch-ms timestamp of the locked vehicle's last GPS fix (from the
+     * GTFS-RT feed's `vehicle.timestamp`, NOT our poll time — SL's feed
+     * lags the actual GPS by 30–90s per BUG-012). null when no vehicle is
+     * tracked OR when SL omitted the timestamp field for that vehicle
+     * (per BUG-016 v2 the repository keeps 0L as a "unknown" sentinel
+     * which the deriver translates to null here).
+     *
+     * Used by the widget renderer to drive a Chronometer that auto-ticks
+     * "Updated MM:SS ago" inside the launcher's process — that way the
+     * displayed age progresses every second between widget pushes,
+     * instead of sitting frozen between the foreground service's 20-s
+     * refreshes.
      */
-    val vehicleAgeSeconds: Int? = null
+    val vehicleTimestampMs: Long? = null
 )
 
 /** Compact summary of one or more SL deviations affecting the active line. */

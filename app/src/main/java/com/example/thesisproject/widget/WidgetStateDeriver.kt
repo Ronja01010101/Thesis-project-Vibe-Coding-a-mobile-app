@@ -81,12 +81,11 @@ object WidgetStateDeriver {
         val locked = pickLockedVehicle(state.vehicles, stops, userStopIndex)
         val rawBusIndex = locked?.second
         // timestampMs == 0L is the sentinel for "SL didn't report GPS time"
-        // (per GtfsRealtimeRepository). When unknown, vehicleAgeSeconds stays
-        // null and the renderer hides the GPS-age line — better than showing
-        // "0s ago" which would be misleading.
-        val vehicleAgeSeconds = locked?.first?.timestampMs
-            ?.takeIf { it > 0L }
-            ?.let { ((nowMs - it) / 1000L).toInt().coerceAtLeast(0) }
+        // (per GtfsRealtimeRepository). Pass through the raw epoch ms when
+        // known; the renderer feeds it to a Chronometer that ticks "Updated
+        // MM:SS ago" every second inside the launcher's process. When
+        // unknown, the renderer hides the GPS-age line entirely.
+        val vehicleTimestampMs: Long? = locked?.first?.timestampMs?.takeIf { it > 0L }
         val visibleBusIndex: Float?
         val stopsAwayFromUser: Int?
         if (rawBusIndex == null || visibleStopCount == 0) {
@@ -150,7 +149,7 @@ object WidgetStateDeriver {
             phase = phase,
             scheduledClockTime = scheduledClock,
             estimatedClockTime = estimatedClock,
-            vehicleAgeSeconds = vehicleAgeSeconds
+            vehicleTimestampMs = vehicleTimestampMs
         )
     }
 
@@ -248,7 +247,7 @@ object WidgetStateDeriver {
             phase = Phase.Dormant,
             scheduledClockTime = null,
             estimatedClockTime = null,
-            vehicleAgeSeconds = null
+            vehicleTimestampMs = null
         )
     }
 }

@@ -188,8 +188,11 @@
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
-    <!-- 6. GPS-age caption (visible only when SL reports a real GPS timestamp). -->
-    <TextView
+    <!-- 6. GPS-age caption (Chronometer auto-ticks every second inside the
+         launcher's process — the displayed age progresses smoothly between
+         widget pushes instead of sitting frozen for 20s. format gets %s
+         replaced with elapsed time as MM:SS or H:MM:SS). -->
+    <Chronometer
         android:id="@+id/widget_gps_age"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -199,7 +202,7 @@
         android:textSize="10sp"
         android:textColor="#9E9E9E"
         android:singleLine="true"
-        android:text=""
+        android:format="@string/widget_gps_age_format"
         tools:ignore="HardcodedText" />
 
     <!-- 7. Deviation pill — full-width amber bar; GONE when no deviation. -->

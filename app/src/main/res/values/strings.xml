@@ -18,4 +18,6 @@
     <string name="widget_time_scale_content_description">Time scale gauge showing predicted vs scheduled difference</string>
     <string name="widget_user_stop_marker">★</string>
     <string name="widget_hero_label">Estimated arrival</string>
+    <!-- %s gets replaced by Chronometer with elapsed time as MM:SS / H:MM:SS. -->
+    <string name="widget_gps_age_format">Updated %s ago</string>
 </resources>

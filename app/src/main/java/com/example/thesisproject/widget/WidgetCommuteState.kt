@@ -6,6 +6,12 @@ package com.example.thesisproject.widget
  * + matched static data (polyline, ordered stops). Pure data — the widget
  * surface (Step 8b) binds these fields directly to its layout views.
  *
+ * The route gauge is **windowed**: only the last [visibleStopCount] stops
+ * leading up to the user's stop are shown (the user's stop is always the
+ * rightmost dot). This is decision-support for catching a bus at a specific
+ * stop, not a full-route journey display — anything past the user's stop is
+ * out of scope per `project_app_scope.md`.
+ *
  * Fields are deliberately primitive / Android-free so this can be carried
  * across processes (foreground service ↔ widget) without a Parcelable
  * serializer beyond what the standard Bundle API already supports.
@@ -17,17 +23,33 @@ data class WidgetCommuteState(
     val direction: String,
     /** Display string for the user's stop, e.g. "Tullgårdsparken". */
     val stopName: String,
-    /** Total stop count along the route — for spacing dots on the route line. */
-    val stopCount: Int,
-    /** Index of the user's stop in the ordered stops list, 0-based. */
-    val userStopIndex: Int,
     /**
-     * Fractional position of the locked vehicle along the ordered stops list.
-     * 0.0 = at first stop, (stopCount - 1) = at last stop. Continuous between
-     * stops (e.g. 3.4 = 40% of the way from stop 3 to stop 4). null when no
-     * vehicle is currently being tracked.
+     * Number of stops shown on the route gauge — at most 5, always ending
+     * at the user's stop (rightmost dot). 0 when no static data is loaded
+     * yet (Dormant placeholder).
      */
-    val busIndex: Float?,
+    val visibleStopCount: Int,
+    /**
+     * Bus position projected into the visible window. Range
+     * [0, visibleStopCount - 1]. null when the bus is outside the window
+     * (further back than [visibleStopCount] - 1 stops) — caller falls back
+     * to [stopsAwayFromUser] for an off-gauge indicator. Also null when no
+     * vehicle is currently tracked.
+     */
+    val visibleBusIndex: Float?,
+    /**
+     * When [visibleBusIndex] is null because the bus is out of window, this
+     * is how many stops back the bus currently is from the user's stop
+     * (rounded up — conservative for "should I leave home" decisions).
+     * null when the bus is on-gauge or no bus is tracked.
+     */
+    val stopsAwayFromUser: Int?,
+    /**
+     * Name of the leftmost visible stop on the gauge — the stop the bus
+     * is approaching from in the visible context. Empty when no static
+     * data is matched.
+     */
+    val visibleStartStopName: String,
     /**
      * Minutes until the next predicted departure of the active line+direction
      * at the user's stop. Computed from SL Transport's `expected` (or
@@ -44,18 +66,7 @@ data class WidgetCommuteState(
     /** Highest-importance deviation summary, or null if no deviations apply. */
     val deviation: WidgetDeviationSummary?,
     /** Computed render variant — see [Phase] for derivation order. */
-    val phase: Phase,
-    /**
-     * Name of the first stop on the matched direction (origin terminus from
-     * the user's perspective). Empty when the static GTFS asset hasn't
-     * been matched yet — sub-step-2 stop labels then collapse to a placeholder.
-     */
-    val firstStopName: String = "",
-    /**
-     * Name of the last stop on the matched direction (destination terminus,
-     * usually = the direction headsign). Empty for the same reason as above.
-     */
-    val lastStopName: String = ""
+    val phase: Phase
 )
 
 /** Compact summary of one or more SL deviations affecting the active line. */

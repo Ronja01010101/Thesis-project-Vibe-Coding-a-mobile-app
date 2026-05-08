@@ -297,11 +297,18 @@ class MainActivity : AppCompatActivity() {
     private fun logWidgetState(state: TrackingState) {
         if (state !is TrackingState.Polling) return
         val widgetState = WidgetStateDeriver.derive(state, state.matchedDirection) ?: return
+        val busPosition = when {
+            widgetState.visibleBusIndex != null ->
+                "visibleBusIndex=${widgetState.visibleBusIndex}/${widgetState.visibleStopCount - 1}"
+            widgetState.stopsAwayFromUser != null ->
+                "stopsAway=${widgetState.stopsAwayFromUser}"
+            else -> "noBus"
+        }
         Log.d(
             "WidgetState",
             "phase=${widgetState.phase} eta=${widgetState.etaMinutes}min " +
-                "delta=${widgetState.deltaMinutes}min busIndex=${widgetState.busIndex} " +
-                "userStopIndex=${widgetState.userStopIndex}/${widgetState.stopCount} " +
+                "delta=${widgetState.deltaMinutes}min $busPosition " +
+                "visibleStops=${widgetState.visibleStopCount} " +
                 "line=${widgetState.lineDesignation} → ${widgetState.direction} " +
                 "stop=${widgetState.stopName} " +
                 (widgetState.deviation?.let { "deviation=\"${it.header.take(40)}\" (${it.totalCount} total)" } ?: "no-deviation")

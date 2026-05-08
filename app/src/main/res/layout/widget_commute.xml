@@ -79,7 +79,10 @@
         android:scaleType="fitXY"
         android:contentDescription="@string/widget_route_content_description" />
 
-    <!-- 3. Stop labels — small text under the route line. -->
+    <!-- 3. Stop labels — small text under the route line. The gauge ends
+         at the user's stop (rightmost), so the right-side label was the
+         post-user terminus, which is out of scope per project_app_scope.md.
+         Now: leftmost-visible-stop on the left + ★ user stop on the right. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -101,29 +104,16 @@
 
         <TextView
             android:id="@+id/widget_user_stop"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:gravity="center_horizontal"
-            android:textSize="10sp"
-            android:textStyle="bold"
-            android:textColor="?android:attr/textColorPrimary"
-            android:singleLine="true"
-            android:ellipsize="end"
-            android:layout_marginStart="4dp"
-            android:layout_marginEnd="4dp"
-            android:text=""
-            tools:ignore="HardcodedText" />
-
-        <TextView
-            android:id="@+id/widget_last_stop"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:gravity="end"
             android:textSize="10sp"
-            android:textColor="?android:attr/textColorSecondary"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"
             android:singleLine="true"
             android:ellipsize="end"
+            android:layout_marginStart="6dp"
             android:text=""
             tools:ignore="HardcodedText" />
     </LinearLayout>

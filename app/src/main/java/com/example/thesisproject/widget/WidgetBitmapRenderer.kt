@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.RectF
 import android.graphics.Typeface
 import kotlin.math.absoluteValue
 import kotlin.math.max
@@ -21,20 +22,21 @@ import kotlin.math.min
  * not the framework on top (per Technical Constraint added to REQUIREMENTS
  * in 2026-05-08 plan revision).
  *
- * All sizes are passed in pixels by the caller; the caller is responsible
- * for converting from dp using device density. Functions are pure — same
- * input → same bitmap; no I/O, no external state.
+ * The route gauge is **windowed** to the last 5 stops ending at the user's
+ * stop (rightmost dot). Bus marker is drawn when the bus is within that
+ * window; out-of-window positions are conveyed as a small "← N stops away"
+ * chip baked into the upper-left of the bitmap.
  */
 object WidgetBitmapRenderer {
 
     /**
-     * Horizontal abstract route. Grey baseline, equally-spaced filled dots
-     * for stops, larger ringed dot at the user's stop, and a circular bus
-     * marker at [WidgetCommuteState.busIndex] with the line designation
-     * inside. Bus-marker fill colour is phase-driven per the design handoff:
-     * red when Late/LeaveNow/Deviation, purple when Early, green when OnTime,
-     * grey when Passed/Dormant. When [WidgetCommuteState.phase] is Passed
-     * the bus marker is omitted entirely.
+     * Horizontal abstract route gauge ending at the user's stop. Grey
+     * baseline, equally-spaced filled dots for each visible stop (small
+     * blue ring at the rightmost = user's stop), circular bus marker at
+     * [WidgetCommuteState.visibleBusIndex] when present (line designation
+     * inside, phase-driven fill colour). When the bus is out of window
+     * the marker is omitted and a "← N stops away" chip is drawn at the
+     * upper-left as the off-gauge indicator.
      */
     fun renderRouteLine(
         context: Context,
@@ -44,7 +46,7 @@ object WidgetBitmapRenderer {
     ): Bitmap {
         val bitmap = Bitmap.createBitmap(widthPx, heightPx, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bitmap)
-        if (state.stopCount < 2) return bitmap
+        if (state.visibleStopCount < 1) return bitmap
 
         val density = context.resources.displayMetrics.density
         val padX = density * 12f
@@ -58,8 +60,8 @@ object WidgetBitmapRenderer {
         }
         canvas.drawLine(padX, midY, widthPx - padX, midY, linePaint)
 
-        // Stop dots — small filled circles for non-user stops, larger ringed
-        // dot at the user's stop so they can locate it at a glance.
+        // Stop dots — small filled circles, larger ringed dot at rightmost
+        // (the user's stop is always at index visibleStopCount - 1).
         val stopPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = COLOR_ROUTE_LINE
             style = Paint.Style.FILL
@@ -77,9 +79,15 @@ object WidgetBitmapRenderer {
         val userOuterRadius = density * 6f
         val userInnerRadius = density * 2.5f
 
-        for (i in 0 until state.stopCount) {
-            val x = padX + span * i / (state.stopCount - 1).toFloat()
-            if (i == state.userStopIndex) {
+        val userIndex = state.visibleStopCount - 1
+        val divisor = max(1, state.visibleStopCount - 1).toFloat()
+        for (i in 0 until state.visibleStopCount) {
+            val x = if (state.visibleStopCount == 1) {
+                widthPx - padX  // single stop = anchor at right (user's stop)
+            } else {
+                padX + span * i / divisor
+            }
+            if (i == userIndex) {
                 canvas.drawCircle(x, midY, userOuterRadius, userOuterPaint)
                 canvas.drawCircle(x, midY, userInnerRadius, userInnerPaint)
             } else {
@@ -87,11 +95,11 @@ object WidgetBitmapRenderer {
             }
         }
 
-        // Bus marker — only when we have a position AND the bus hasn't passed.
-        val busIndex = state.busIndex
-        if (busIndex != null && state.phase != Phase.Passed) {
-            val clamped = max(0f, min((state.stopCount - 1).toFloat(), busIndex))
-            val busX = padX + span * clamped / (state.stopCount - 1).toFloat()
+        // Bus marker — only when in window AND not Passed.
+        val visibleBus = state.visibleBusIndex
+        if (visibleBus != null && state.phase != Phase.Passed) {
+            val clamped = max(0f, min((state.visibleStopCount - 1).toFloat(), visibleBus))
+            val busX = padX + span * clamped / divisor
             val busFill = busColorFor(state.phase)
             val busRadius = density * 11f
 
@@ -117,7 +125,59 @@ object WidgetBitmapRenderer {
             canvas.drawText(text, busX, textY, textPaint)
         }
 
+        // Off-gauge indicator: "← N stops" chip at upper-left when the bus
+        // is out of the visible window. Uses the bus's phase colour to
+        // remain visually consistent with where the bus would have been.
+        val stopsAway = state.stopsAwayFromUser
+        if (visibleBus == null && stopsAway != null && state.phase != Phase.Passed) {
+            drawStopsAwayChip(
+                canvas = canvas,
+                density = density,
+                xLeft = density * 2f,
+                yMid = midY,
+                stopsAway = stopsAway,
+                lineDesignation = state.lineDesignation,
+                phase = state.phase
+            )
+        }
+
         return bitmap
+    }
+
+    private fun drawStopsAwayChip(
+        canvas: Canvas,
+        density: Float,
+        xLeft: Float,
+        yMid: Float,
+        stopsAway: Int,
+        lineDesignation: String,
+        phase: Phase
+    ) {
+        val text = "${lineDesignation.takeIf { it.isNotBlank() } ?: "?"} ←$stopsAway"
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.WHITE
+            textSize = density * 10f
+            typeface = Typeface.DEFAULT_BOLD
+            textAlign = Paint.Align.LEFT
+        }
+        val padHoriz = density * 6f
+        val padVert = density * 3f
+        val textWidth = textPaint.measureText(text)
+        val chipWidth = textWidth + 2 * padHoriz
+        val chipHeight = (textPaint.descent() - textPaint.ascent()) + 2 * padVert
+        val chipRect = RectF(
+            xLeft,
+            yMid - chipHeight / 2,
+            xLeft + chipWidth,
+            yMid + chipHeight / 2
+        )
+        val chipFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = busColorFor(phase)
+            style = Paint.Style.FILL
+        }
+        canvas.drawRoundRect(chipRect, density * 6f, density * 6f, chipFill)
+        val textY = yMid - (textPaint.descent() + textPaint.ascent()) / 2f
+        canvas.drawText(text, xLeft + padHoriz, textY, textPaint)
     }
 
     /**
@@ -125,10 +185,6 @@ object WidgetBitmapRenderer {
      * ±[MAX_DELTA_MIN] (5 min). Coloured dot at the current delta, clamped
      * to the visible range — text label next to the gauge still shows the
      * full integer value, the gauge is just the visual hint.
-     *
-     * No dot drawn when [WidgetCommuteState.deltaMinutes] is null (e.g.
-     * SL hasn't predicted this departure yet) — the empty axis itself
-     * conveys "no data".
      */
     fun renderTimeScale(
         context: Context,
@@ -191,11 +247,8 @@ object WidgetBitmapRenderer {
         Phase.Passed, Phase.Dormant -> COLOR_NEUTRAL
     }
 
-    /** Visible delta range on the gauge, in minutes. Larger deltas peg at the ends. */
     private const val MAX_DELTA_MIN = 5
 
-    // Colours match Step 6's map-marker palette so the visual identity is
-    // continuous between map markers and widget bus markers.
     private const val COLOR_ROUTE_LINE = 0xFFBDBDBD.toInt()
     private const val COLOR_USER_STOP = 0xFF1976D2.toInt()
     private const val COLOR_ON_TIME = 0xFF43A047.toInt()

@@ -7,10 +7,12 @@ import com.example.thesisproject.R
 
 /**
  * Pure binding from [WidgetCommuteState] (or no-state Dormant) → [RemoteViews].
- * Sub-step 1 was text-only; sub-step 2 adds Canvas-rendered route-line and
+ * Sub-step 1 was text-only; sub-step 2 added Canvas-rendered route-line +
  * time-scale gauge bitmaps via [WidgetBitmapRenderer], plus a stop-labels
- * row (first stop / user's stop bold with star / last stop) per the design
- * handoff.
+ * row. Sub-step 2.5 (this revision) windowed the route gauge to the last
+ * 5 stops ending at the user's stop, dropped the post-user-stop label
+ * (out of scope per project_app_scope.md), and added an off-gauge
+ * "← N stops away" indicator baked into the route bitmap.
  *
  * Called from two places: the AppWidgetProvider's `onUpdate` (for cold
  * widget updates from the system) AND the foreground service's per-tick
@@ -47,7 +49,7 @@ object WidgetRenderer {
 
         // --- 2. Route line gauge — Canvas bitmap. ---
         val density = context.resources.displayMetrics.density
-        if (state.stopCount >= 2 && state.phase != Phase.Dormant) {
+        if (state.visibleStopCount >= 1 && state.phase != Phase.Dormant) {
             val route = WidgetBitmapRenderer.renderRouteLine(
                 context = context,
                 widthPx = (ROUTE_LINE_DP_WIDTH * density).toInt(),
@@ -60,8 +62,8 @@ object WidgetRenderer {
             views.setViewVisibility(R.id.widget_route, View.INVISIBLE)
         }
 
-        // --- 3. Stop labels ---
-        views.setTextViewText(R.id.widget_first_stop, state.firstStopName)
+        // --- 3. Stop labels (leftmost-visible + ★ user stop) ---
+        views.setTextViewText(R.id.widget_first_stop, state.visibleStartStopName)
         if (state.stopName.isNotBlank()) {
             val star = context.getString(R.string.widget_user_stop_marker)
             views.setTextViewText(R.id.widget_user_stop, "$star ${state.stopName}")
@@ -70,7 +72,6 @@ object WidgetRenderer {
             views.setTextViewText(R.id.widget_user_stop, "")
             views.setViewVisibility(R.id.widget_user_stop, View.GONE)
         }
-        views.setTextViewText(R.id.widget_last_stop, state.lastStopName)
 
         // --- 4. Hero ETA — phase-driven text replacements. ---
         val heroText = when (state.phase) {
@@ -140,7 +141,6 @@ object WidgetRenderer {
         views.setTextViewText(R.id.widget_first_stop, "")
         views.setTextViewText(R.id.widget_user_stop, "")
         views.setViewVisibility(R.id.widget_user_stop, View.GONE)
-        views.setTextViewText(R.id.widget_last_stop, "")
         views.setViewVisibility(R.id.widget_route, View.INVISIBLE)
         views.setViewVisibility(R.id.widget_time_scale, View.INVISIBLE)
         views.setViewVisibility(R.id.widget_deviation, View.GONE)

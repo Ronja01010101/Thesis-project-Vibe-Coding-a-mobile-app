@@ -8,15 +8,21 @@ import com.example.thesisproject.util.GeoMath
 import java.time.Duration
 import java.time.LocalDateTime
 import kotlin.math.abs
+import kotlin.math.ceil
 
 /**
  * Pure derivation: TrackingState + matched direction + clock → WidgetCommuteState.
  * No I/O, no Android types — testable as a plain JVM unit.
  *
- * Step 8a sub-step 1 produces this state and logs it; the widget surface
- * (Step 8b) is where it gets bound to RemoteViews.
+ * The route gauge is **windowed to the last [WINDOW_SIZE] stops ending at
+ * the user's stop** — anything further back the bus's path or after the
+ * user's stop is out of scope per `project_app_scope.md` (decision support
+ * for catching a specific bus at a specific stop, not a journey planner).
  */
 object WidgetStateDeriver {
+
+    /** Maximum stops shown on the route gauge ending at the user's stop. */
+    private const val WINDOW_SIZE = 5
 
     /**
      * Build the widget render state from the current tracker snapshot. Returns
@@ -52,12 +58,35 @@ object WidgetStateDeriver {
             stops.indexOfFirst { it.name.equals(name, ignoreCase = true) }
         }?.takeIf { it >= 0 } ?: 0
 
-        // Vehicle lock for sub-step 1: pick the vehicle that's at-or-before the
-        // user's stop and closest to arriving (= largest busIndex ≤ userStopIndex).
-        // If every tracked vehicle is already past the user's stop, fall back
-        // to the smallest busIndex (= the next bus that'll eventually reach
-        // the user). Sub-step 2 will pin a single vehicle for the whole window.
-        val busIndex = pickLockedBusIndex(state.vehicles, stops, userStopIndex)
+        // Compute the visible window: at most WINDOW_SIZE stops ending at
+        // the user's stop. Shorter when user's stop is near the start of
+        // the route (e.g. only 2 stops before — gauge shows 3 dots total).
+        val windowStart = maxOf(0, userStopIndex - (WINDOW_SIZE - 1))
+        val visibleStopCount = if (stops.isEmpty()) 0 else userStopIndex - windowStart + 1
+        val visibleStartStopName = stops.getOrNull(windowStart)?.name.orEmpty()
+
+        // Project bus position into the visible window. Out-of-window bus
+        // positions yield null + a stops-away count for the off-gauge
+        // indicator. Any bus past the user's stop is out of scope (Phase.Passed
+        // takes over) and yields null + null.
+        val rawBusIndex = pickLockedBusIndex(state.vehicles, stops, userStopIndex)
+        val visibleBusIndex: Float?
+        val stopsAwayFromUser: Int?
+        if (rawBusIndex == null || visibleStopCount == 0) {
+            visibleBusIndex = null
+            stopsAwayFromUser = null
+        } else if (rawBusIndex < windowStart) {
+            visibleBusIndex = null
+            // Conservative rounding (ceil) so "5 stops away" never under-promises.
+            stopsAwayFromUser = ceil(userStopIndex - rawBusIndex.toDouble()).toInt().coerceAtLeast(1)
+        } else if (rawBusIndex > userStopIndex) {
+            // Bus is past the user — Phase.Passed branch will hide the marker.
+            visibleBusIndex = null
+            stopsAwayFromUser = null
+        } else {
+            visibleBusIndex = (rawBusIndex - windowStart).coerceIn(0f, (visibleStopCount - 1).toFloat())
+            stopsAwayFromUser = null
+        }
 
         val etaMin = state.nextDeparture?.let { dep ->
             val target = dep.estimatedTime ?: dep.scheduledTime
@@ -78,6 +107,7 @@ object WidgetStateDeriver {
             }
 
         val isCancelled = state.nextDeparture?.status == DepartureStatus.CANCELLED
+        // Decide phase first, since Passed bus marker is suppressed downstream.
         val phase = computePhase(
             etaMin = etaMin,
             deltaMin = deltaMin,
@@ -89,18 +119,24 @@ object WidgetStateDeriver {
             lineDesignation = cfg.lineDesignation?.takeIf { it.isNotBlank() } ?: cfg.lineId,
             direction = cfg.direction,
             stopName = cfg.stopName.orEmpty(),
-            stopCount = stops.size,
-            userStopIndex = userStopIndex,
-            busIndex = busIndex,
+            visibleStopCount = visibleStopCount,
+            visibleBusIndex = visibleBusIndex,
+            stopsAwayFromUser = stopsAwayFromUser,
+            visibleStartStopName = visibleStartStopName,
             etaMinutes = etaMin,
             deltaMinutes = deltaMin,
             deviation = deviationSummary,
-            phase = phase,
-            firstStopName = stops.firstOrNull()?.name.orEmpty(),
-            lastStopName = stops.lastOrNull()?.name.orEmpty()
+            phase = phase
         )
     }
 
+    /**
+     * Pick the most relevant bus to "lock onto" from the matched direction's
+     * tracked vehicles. Sub-step 1 heuristic: the vehicle whose busIndex is
+     * largest while still ≤ userStopIndex (= the bus that's about to reach
+     * the user). If every vehicle is already past, fall back to the smallest
+     * busIndex (= the next one that'll come). null when no vehicles tracked.
+     */
     private fun pickLockedBusIndex(
         vehicles: List<com.example.thesisproject.model.VehiclePosition>,
         stops: List<SlStop>,
@@ -168,9 +204,10 @@ object WidgetStateDeriver {
             lineDesignation = "—",
             direction = "",
             stopName = "",
-            stopCount = 0,
-            userStopIndex = 0,
-            busIndex = null,
+            visibleStopCount = 0,
+            visibleBusIndex = null,
+            stopsAwayFromUser = null,
+            visibleStartStopName = "",
             etaMinutes = null,
             deltaMinutes = null,
             deviation = null,

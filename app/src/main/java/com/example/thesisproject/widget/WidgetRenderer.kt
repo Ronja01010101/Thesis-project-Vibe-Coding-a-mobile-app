@@ -82,18 +82,18 @@ object WidgetRenderer {
         }
 
         // --- 4. Stops-away caption — only when bus is out of the visible window.
-        // "behind" rather than "away": this is a *positional* indicator (how
-        // many stops back along the route), NOT a remaining-time estimate.
-        // The temporal answer is the hero ETA, which comes from SL Departures'
-        // prediction model — that's the authoritative time-to-arrival source.
-        // (BUG-021: previous wording "stops away" primed users to expect minute-
-        // equivalent intuition, which can mismatch SL's actual prediction
-        // because stop spacing varies along the route.)
+        // Caveat preserved from BUG-021: this is from GTFS-RT VehiclePositions
+        // (live lat/lons) while the hero ETA is from SL Departures (prediction
+        // model). Trafiklab support has confirmed `journey.id` ≠ GTFS-RT
+        // `trip_id`, so the rendered bus is not guaranteed to be the same
+        // physical vehicle SL is predicting for the user's stop. In practice
+        // it usually is (next-arriving = closest-visible), but mismatches can
+        // happen on routes where buses overlap or run close together.
         val stopsAway = state.stopsAwayFromUser
         if (stopsAway != null && state.phase != Phase.Passed && state.phase != Phase.Dormant) {
             views.setTextViewText(
                 R.id.widget_stops_away,
-                "Bus is $stopsAway stop${if (stopsAway == 1) "" else "s"} behind"
+                "$stopsAway stop${if (stopsAway == 1) "" else "s"} away"
             )
             views.setViewVisibility(R.id.widget_stops_away, View.VISIBLE)
         } else {

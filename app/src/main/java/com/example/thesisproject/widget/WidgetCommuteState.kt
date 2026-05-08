@@ -44,7 +44,18 @@ data class WidgetCommuteState(
     /** Highest-importance deviation summary, or null if no deviations apply. */
     val deviation: WidgetDeviationSummary?,
     /** Computed render variant — see [Phase] for derivation order. */
-    val phase: Phase
+    val phase: Phase,
+    /**
+     * Name of the first stop on the matched direction (origin terminus from
+     * the user's perspective). Empty when the static GTFS asset hasn't
+     * been matched yet — sub-step-2 stop labels then collapse to a placeholder.
+     */
+    val firstStopName: String = "",
+    /**
+     * Name of the last stop on the matched direction (destination terminus,
+     * usually = the direction headsign). Empty for the same reason as above.
+     */
+    val lastStopName: String = ""
 )
 
 /** Compact summary of one or more SL deviations affecting the active line. */

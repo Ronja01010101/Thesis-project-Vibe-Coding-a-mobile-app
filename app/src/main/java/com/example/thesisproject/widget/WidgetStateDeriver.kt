@@ -95,7 +95,9 @@ object WidgetStateDeriver {
             etaMinutes = etaMin,
             deltaMinutes = deltaMin,
             deviation = deviationSummary,
-            phase = phase
+            phase = phase,
+            firstStopName = stops.firstOrNull()?.name.orEmpty(),
+            lastStopName = stops.lastOrNull()?.name.orEmpty()
         )
     }
 

@@ -1,18 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    Step 8b sub-step 1: text-only widget layout. Sub-step 2 will add Canvas-
-    rendered route-line and time-scale-gauge bitmaps below the header. For
-    now, the visual hierarchy from the handoff is preserved: header row
-    (line + direction) on top, hero ETA mid, deviation pill at bottom.
+    Step 8b sub-step 2: text + Canvas-rendered gauges.
 
-    RemoteViews supports a limited set of view types — TextView / ImageView /
-    Button / FrameLayout / LinearLayout / RelativeLayout / GridLayout /
-    ListView / ProgressBar. No CardView or constraint-layout flavours.
-    We use LinearLayout for the simplest possible widget surface.
+    Visual hierarchy from the design handoff (top to bottom):
+      1. Header row — line badge, arrow, destination, scheduled time slot
+      2. Route line — Canvas-rendered bitmap (stops + user-stop dot + bus marker)
+      3. Stop labels — first stop, user's stop bold with star, last stop
+      4. Bottom row — hero ETA, time-scale gauge bitmap, delta label
+      5. Deviation pill — full-width amber bar; GONE when no deviation applies
 
-    Tap anywhere on the widget opens MainActivity (covers P1-FR11 — though
-    Step 9's separate row in the build order is still not formally Done; this
-    counts as the first half of it).
+    RemoteViews supports a limited set of view types — TextView, ImageView,
+    Button, FrameLayout, LinearLayout, RelativeLayout, GridLayout, ListView,
+    ProgressBar. No CardView / ConstraintLayout.
+
+    Tap anywhere on the widget root opens MainActivity (covers half of P1-FR11).
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
@@ -20,10 +21,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:padding="12dp"
+    android:padding="10dp"
     android:background="?android:attr/colorBackground">
 
-    <!-- Header row: line + arrow + direction (left), scheduled time (right). -->
+    <!-- 1. Header row. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -51,7 +52,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:layout_marginStart="6dp"
-            android:textSize="14sp"
+            android:textSize="13sp"
             android:textColor="?android:attr/textColorPrimary"
             android:singleLine="true"
             android:ellipsize="end"
@@ -62,44 +63,113 @@
             android:id="@+id/widget_scheduled"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="12sp"
+            android:textSize="11sp"
             android:textColor="?android:attr/textColorSecondary"
             android:fontFamily="monospace"
             android:text=""
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
-    <!-- Bottom row: hero ETA (left) + delta-vs-schedule label (right). -->
+    <!-- 2. Route line — Canvas bitmap. ~24dp tall; ImageView scales to fit. -->
+    <ImageView
+        android:id="@+id/widget_route"
+        android:layout_width="match_parent"
+        android:layout_height="24dp"
+        android:layout_marginTop="6dp"
+        android:scaleType="fitXY"
+        android:contentDescription="@string/widget_route_content_description" />
+
+    <!-- 3. Stop labels — small text under the route line. -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="2dp">
+
+        <TextView
+            android:id="@+id/widget_first_stop"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="start"
+            android:textSize="10sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text=""
+            tools:ignore="HardcodedText" />
+
+        <TextView
+            android:id="@+id/widget_user_stop"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_horizontal"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="4dp"
+            android:text=""
+            tools:ignore="HardcodedText" />
+
+        <TextView
+            android:id="@+id/widget_last_stop"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="end"
+            android:textSize="10sp"
+            android:textColor="?android:attr/textColorSecondary"
+            android:singleLine="true"
+            android:ellipsize="end"
+            android:text=""
+            tools:ignore="HardcodedText" />
+    </LinearLayout>
+
+    <!-- 4. Bottom row — hero ETA + time-scale + delta label. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
         android:orientation="horizontal"
         android:gravity="center_vertical"
-        android:layout_marginTop="6dp">
+        android:layout_marginTop="4dp">
 
         <TextView
             android:id="@+id/widget_eta"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:textSize="32sp"
+            android:textSize="28sp"
             android:textStyle="bold"
             android:textColor="?android:attr/textColorPrimary"
+            android:singleLine="true"
+            android:ellipsize="end"
             android:text="—"
             tools:ignore="HardcodedText" />
+
+        <ImageView
+            android:id="@+id/widget_time_scale"
+            android:layout_width="72dp"
+            android:layout_height="20dp"
+            android:layout_marginEnd="6dp"
+            android:scaleType="fitXY"
+            android:contentDescription="@string/widget_time_scale_content_description" />
 
         <TextView
             android:id="@+id/widget_delta"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textSize="14sp"
+            android:textSize="12sp"
             android:textColor="?android:attr/textColorSecondary"
+            android:singleLine="true"
             android:text=""
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
-    <!-- Deviation pill: visible when state.deviation != null. -->
+    <!-- 5. Deviation pill — visible when state.deviation != null. -->
     <TextView
         android:id="@+id/widget_deviation"
         android:layout_width="match_parent"

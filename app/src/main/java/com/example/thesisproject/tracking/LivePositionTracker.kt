@@ -2,11 +2,13 @@ package com.example.thesisproject.tracking
 
 import android.util.Log
 import com.example.thesisproject.model.CommuteConfig
+import com.example.thesisproject.model.Departure
 import com.example.thesisproject.model.Deviation
 import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.GtfsRealtimeRepository
 import com.example.thesisproject.repository.SlDeviationsRepository
 import com.example.thesisproject.repository.SlLineRepository
+import com.example.thesisproject.repository.StopRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -16,6 +18,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -41,10 +44,12 @@ class LivePositionTracker(
     private val lineRepository: SlLineRepository,
     private val realtimeRepository: GtfsRealtimeRepository,
     private val deviationsRepository: SlDeviationsRepository,
+    private val stopRepository: StopRepository,
     private val apiKey: String,
     private val pollIntervalMs: Long = DEFAULT_POLL_INTERVAL_MS,
     private val clock: () -> LocalTime = { LocalTime.now() },
     private val instantClock: () -> Instant = { Instant.now() },
+    private val localDateTimeClock: () -> LocalDateTime = { LocalDateTime.now() },
     private val zone: ZoneId = ZoneId.systemDefault()
 ) {
 
@@ -57,6 +62,12 @@ class LivePositionTracker(
     private var cachedDeviations: List<Deviation> = emptyList()
     private var cachedDeviationEtag: String? = null
     private var cachedDeviationKey: Pair<String, String>? = null
+
+    // Step 8a: cached next-departure for the widget's ETA + delta. Refreshed
+    // every 3rd vehicle tick (= 60s, same cadence as deviations). Invalidated
+    // when the active commute's line/stop/direction key changes.
+    private var cachedNextDeparture: Departure? = null
+    private var cachedDepartureKey: Triple<String, String, Int?>? = null
 
     fun start(scope: CoroutineScope) {
         if (pollingJob?.isActive == true) return
@@ -74,6 +85,8 @@ class LivePositionTracker(
         cachedDeviations = emptyList()
         cachedDeviationEtag = null
         cachedDeviationKey = null
+        cachedNextDeparture = null
+        cachedDepartureKey = null
         tickCount = 0L
         _state.value = TrackingState.Idle
     }
@@ -82,11 +95,13 @@ class LivePositionTracker(
         val configs = configStore.getAll()
         val active = configs.firstOrNull { isInWindow(it, clock()) }
         if (active == null) {
-            // No active commute — drop any cached deviations so the next active
-            // window starts fresh.
+            // No active commute — drop any cached deviations and next-departure
+            // so the next active window starts fresh.
             cachedDeviations = emptyList()
             cachedDeviationEtag = null
             cachedDeviationKey = null
+            cachedNextDeparture = null
+            cachedDepartureKey = null
             _state.value = TrackingState.NoActiveCommute(configs.size)
             return
         }
@@ -141,14 +156,50 @@ class LivePositionTracker(
         if (shouldFetchDeviations) {
             fetchDeviations(active)
         }
+
+        // Step 8a: same cadence + invalidation pattern for SL Departures. Key
+        // is (stopId, lineId, directionCode) — directly the inputs to
+        // getNextDeparture, so any change forces a refresh.
+        val departureKey = Triple(active.stopId, active.lineId, active.directionCode)
+        val departureKeyChanged = departureKey != cachedDepartureKey
+        if (departureKeyChanged) {
+            cachedDepartureKey = departureKey
+            cachedNextDeparture = null
+        }
+        val shouldFetchDeparture = departureKeyChanged || tickCount % DEPARTURE_POLL_RATIO == 0L
+        if (shouldFetchDeparture) {
+            fetchNextDeparture(active)
+        }
         tickCount++
 
         _state.value = TrackingState.Polling(
             activeCommute = active,
             vehicles = vehicles,
             lastUpdateMs = System.currentTimeMillis(),
-            deviations = cachedDeviations
+            deviations = cachedDeviations,
+            nextDeparture = cachedNextDeparture,
+            matchedDirection = direction
         )
+    }
+
+    private suspend fun fetchNextDeparture(active: CommuteConfig) {
+        try {
+            cachedNextDeparture = stopRepository.getNextDeparture(
+                stopId = active.stopId,
+                lineId = active.lineId,
+                directionCode = active.directionCode,
+                after = localDateTimeClock()
+            )
+            val dep = cachedNextDeparture
+            if (dep == null) {
+                Log.d(TAG, "next departure: (none) line=${active.lineId} stop=${active.stopId} dir=${active.directionCode}")
+            } else {
+                val predicted = dep.estimatedTime?.let { " predicted=$it" }.orEmpty()
+                Log.d(TAG, "next departure: scheduled=${dep.scheduledTime}$predicted status=${dep.status}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Departure fetch failed (keeping cache)", e)
+        }
     }
 
     private suspend fun fetchDeviations(active: CommuteConfig) {
@@ -232,5 +283,9 @@ class LivePositionTracker(
         // Deviations are slower-changing than vehicle positions; the docs cap
         // polling at "once a minute". 3 vehicle ticks = 60s, exactly aligned.
         private const val DEVIATION_POLL_RATIO = 3L
+        // SL Departures has no documented per-minute cap, but the prediction
+        // doesn't update faster than the vehicle GPS does — same 60s cadence
+        // as deviations is plenty fresh for a "next bus in N minutes" widget.
+        private const val DEPARTURE_POLL_RATIO = 3L
     }
 }

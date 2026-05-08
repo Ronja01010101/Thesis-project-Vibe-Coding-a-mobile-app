@@ -1,7 +1,9 @@
 package com.example.thesisproject.tracking
 
 import com.example.thesisproject.model.CommuteConfig
+import com.example.thesisproject.model.Departure
 import com.example.thesisproject.model.Deviation
+import com.example.thesisproject.model.SlDirection
 import com.example.thesisproject.model.VehiclePosition
 
 /**
@@ -24,12 +26,23 @@ sealed class TrackingState {
      * when the most recent fetch completed. [deviations] are SL Deviations API
      * messages already filtered to the active commute's line + stop AND the
      * commute's time window (active-now plus upcoming-during-window).
+     * [nextDeparture] is the soonest predicted departure of the active line
+     * + direction at the user's stop (Step 8a — feeds the widget's ETA + delta).
      */
     data class Polling(
         val activeCommute: CommuteConfig,
         val vehicles: List<VehiclePosition>,
         val lastUpdateMs: Long,
-        val deviations: List<Deviation> = emptyList()
+        val deviations: List<Deviation> = emptyList(),
+        val nextDeparture: Departure? = null,
+        /**
+         * The matched [SlDirection] for the active commute (line + direction
+         * resolved against the bundled GTFS asset). Populated by the tracker
+         * after each successful poll; carried on the state so the widget
+         * deriver doesn't have to re-run catalog matching. Null only on
+         * legacy-state shapes that predate Step 8a.
+         */
+        val matchedDirection: SlDirection? = null
     ) : TrackingState()
 
     /** A fetch failed or the active commute couldn't be matched to the catalog. */

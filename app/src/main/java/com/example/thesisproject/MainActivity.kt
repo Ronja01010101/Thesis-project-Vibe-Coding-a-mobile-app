@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.EditText
@@ -36,11 +37,13 @@ import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.GtfsRealtimeRepository
 import com.example.thesisproject.repository.SlDeviationsRepository
 import com.example.thesisproject.repository.SlLineRepository
+import com.example.thesisproject.repository.StopRepository
 import com.example.thesisproject.tracking.LivePositionTracker
 import com.example.thesisproject.tracking.TrackingState
 import com.example.thesisproject.ui.MapViewModel
 import com.example.thesisproject.ui.StopAdapter
 import com.example.thesisproject.ui.StopConfigBottomSheet
+import com.example.thesisproject.widget.WidgetStateDeriver
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -90,12 +93,17 @@ class MainActivity : AppCompatActivity() {
     // stop in onPause. State observed by the verification overlay.
     private val realtimeRepository by lazy { GtfsRealtimeRepository() }
     private val deviationsRepository by lazy { SlDeviationsRepository() }
+    // Step 8a: SL Departures repository, also feeds the widget state deriver.
+    // Reused from Step 3's stop-config flow (different MapViewModel instance,
+    // but the underlying Retrofit client is per-repository — harmless).
+    private val stopRepository by lazy { StopRepository() }
     private val livePositionTracker by lazy {
         LivePositionTracker(
             configStore = commuteStore,
             lineRepository = lineRepository,
             realtimeRepository = realtimeRepository,
             deviationsRepository = deviationsRepository,
+            stopRepository = stopRepository,
             apiKey = BuildConfig.GTFS_REALTIME_KEY
         )
     }
@@ -249,6 +257,27 @@ class MainActivity : AppCompatActivity() {
         renderVehicles(state)
         renderDeviations(state)
         maybeAutoFit(state)
+        logWidgetState(state)
+    }
+
+    /**
+     * Step 8a sub-step 1: derive the widget render state from the current
+     * tracker snapshot and log it. The widget surface itself ships in Step 8b;
+     * for now this lets us verify the deriver works against real data in the
+     * existing app (foreground service for off-app delivery is sub-step 2).
+     */
+    private fun logWidgetState(state: TrackingState) {
+        if (state !is TrackingState.Polling) return
+        val widgetState = WidgetStateDeriver.derive(state, state.matchedDirection) ?: return
+        Log.d(
+            "WidgetState",
+            "phase=${widgetState.phase} eta=${widgetState.etaMinutes}min " +
+                "delta=${widgetState.deltaMinutes}min busIndex=${widgetState.busIndex} " +
+                "userStopIndex=${widgetState.userStopIndex}/${widgetState.stopCount} " +
+                "line=${widgetState.lineDesignation} → ${widgetState.direction} " +
+                "stop=${widgetState.stopName} " +
+                (widgetState.deviation?.let { "deviation=\"${it.header.take(40)}\" (${it.totalCount} total)" } ?: "no-deviation")
+        )
     }
 
     /**

@@ -1,11 +1,14 @@
 package com.example.thesisproject.repository
 
 import com.example.thesisproject.api.SlTransportService
+import com.example.thesisproject.model.Departure
+import com.example.thesisproject.model.DepartureStatus
 import com.example.thesisproject.model.Line
 import com.example.thesisproject.model.Stop
 import com.example.thesisproject.model.StopLineOption
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.time.LocalDateTime
 
 class StopRepository {
 
@@ -47,6 +50,80 @@ class StopRepository {
                 .sortedWith(compareBy({ it.line.transportMode }, { it.line.name }, { it.direction }))
         } catch (e: Exception) {
             emptyList()
+        }
+    }
+
+    /**
+     * Step 8a: fetches the next predicted departure at [stopId] for the given
+     * (lineId, directionCode), at-or-after [after]. Returns the soonest match
+     * with both `scheduled` and (when SL has prediction data) `expected`
+     * timestamps populated, so the widget deriver can compute ETA + delta.
+     *
+     * Returns null when no match could be found — already-passed buses,
+     * unparseable timestamps, line/direction not stopping here in the
+     * current departures window, or any network/parse failure.
+     *
+     * IMPORTANT (anti-BUG-009 trap): SL Transport's `journey.id` is NOT the
+     * same as GTFS-RT's `trip_id`. We deliberately do NOT use any field on
+     * the departure to link it to a specific GTFS-RT vehicle being tracked.
+     * The widget surfaces "next bus arriving here" + "vehicles currently
+     * on this line" as two independent data streams.
+     */
+    suspend fun getNextDeparture(
+        stopId: String,
+        lineId: String,
+        directionCode: Int?,
+        after: LocalDateTime
+    ): Departure? {
+        val lineIdInt = lineId.toIntOrNull() ?: return null
+        val response = try {
+            api.getDepartures(stopId)
+        } catch (e: Exception) {
+            return null
+        }
+        return response.departures
+            .asSequence()
+            .filter { it.line.id == lineIdInt }
+            .filter { directionCode == null || it.directionCode == directionCode }
+            .mapNotNull { dep ->
+                val scheduled = parseSlDateTime(dep.scheduled) ?: return@mapNotNull null
+                if (scheduled.isBefore(after)) return@mapNotNull null
+                Departure(
+                    stopId = stopId,
+                    lineId = lineId,
+                    direction = dep.direction.orEmpty(),
+                    scheduledTime = scheduled,
+                    estimatedTime = parseSlDateTime(dep.expected),
+                    status = mapDepartureState(dep.state),
+                    dataSource = "sl-transport-departures",
+                    fetchedAtMs = System.currentTimeMillis()
+                )
+            }
+            .sortedBy { it.scheduledTime }
+            .firstOrNull()
+    }
+
+    private fun parseSlDateTime(raw: String?): LocalDateTime? {
+        if (raw.isNullOrBlank()) return null
+        return try {
+            LocalDateTime.parse(raw)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Map SL's `departureStateEnum` to our coarser [DepartureStatus]. SL has
+     * no explicit "DELAYED" state — lateness is expressed as the difference
+     * between `scheduled` and `expected`, which the widget deriver computes
+     * separately. Anything that means "this bus isn't running" collapses to
+     * CANCELLED so downstream code only has to check one value.
+     */
+    private fun mapDepartureState(state: String?): DepartureStatus {
+        return when (state?.uppercase()) {
+            "CANCELLED", "INHIBITED", "REPLACED", "MISSED", "NOTEXPECTED" -> DepartureStatus.CANCELLED
+            "EXPECTED", "ATSTOP", "BOARDING", "BOARDINGCLOSED" -> DepartureStatus.ON_TIME
+            else -> DepartureStatus.UNKNOWN
         }
     }
 }

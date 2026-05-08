@@ -21,9 +21,12 @@ import com.example.thesisproject.R
  */
 object WidgetRenderer {
 
-    /** Render at a generous bitmap resolution that downscales cleanly. */
+    /** Render at a generous bitmap resolution that downscales cleanly.
+     *  Route height is 28dp so the bus marker (11dp radius + 1.5dp outline =
+     *  12.5dp from center) fits inside with ~1.5dp breathing room each side
+     *  rather than getting clipped at the edges. */
     private const val ROUTE_LINE_DP_WIDTH = 320
-    private const val ROUTE_LINE_DP_HEIGHT = 22
+    private const val ROUTE_LINE_DP_HEIGHT = 28
     private const val TIME_SCALE_DP_WIDTH = 80
     private const val TIME_SCALE_DP_HEIGHT = 20
 
@@ -45,14 +48,14 @@ object WidgetRenderer {
                 }
             }
         )
-        // Header right slot: scheduled clock time, plus an arrow + estimated
-        // when the prediction differs (e.g. "07:54 → 07:56" when 2 min late).
-        val scheduledHeader = when {
-            state.scheduledClockTime != null && state.estimatedClockTime != null ->
-                "${state.scheduledClockTime} → ${state.estimatedClockTime}"
-            state.scheduledClockTime != null -> state.scheduledClockTime
-            else -> ""
-        }
+        // Header right slot: scheduled clock time only, prefixed with "Sched"
+        // so the number isn't bare. The predicted clock time is intentionally
+        // NOT shown here — the hero ETA's countdown ("19 min") already encodes
+        // it (estimated = now + countdown), and the delta line ("+1' late")
+        // already encodes the gap. Showing scheduled→estimated as well would
+        // mean the same fact (when the bus arrives) is encoded three ways,
+        // which makes the widget harder to read at a glance.
+        val scheduledHeader = state.scheduledClockTime?.let { "Sched $it" }.orEmpty()
         views.setTextViewText(R.id.widget_scheduled, scheduledHeader)
 
         // --- 2. Route line gauge — Canvas bitmap. ---

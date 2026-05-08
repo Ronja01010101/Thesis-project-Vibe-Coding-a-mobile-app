@@ -74,11 +74,13 @@
             tools:ignore="HardcodedText" />
     </LinearLayout>
 
-    <!-- 2. Route line — Canvas bitmap. -->
+    <!-- 2. Route line — Canvas bitmap. 28dp tall so the bus marker (radius
+         11dp + 1.5dp outline = 12.5dp from center) doesn't get clipped at
+         top/bottom; previous 22dp left ~1.5dp clipped each side. -->
     <ImageView
         android:id="@+id/widget_route"
         android:layout_width="match_parent"
-        android:layout_height="22dp"
+        android:layout_height="28dp"
         android:layout_marginTop="6dp"
         android:scaleType="fitXY"
         android:contentDescription="@string/widget_route_content_description" />

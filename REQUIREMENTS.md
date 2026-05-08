@@ -36,8 +36,8 @@
 | P1-FR3 | Display selected line and relevant stops on the map | P1-FR1, P1-FR2 | OSMDroid, SL Transport | Medium |
 | P1-FR4 | Fetch live vehicle-position data only for selected line, direction, and time window | P1-FR2 | GTFS Regional Realtime | Hard |
 | P1-FR5 | Display live position of selected vehicle relative to selected stop and route | P1-FR3, P1-FR4 | OSMDroid, GTFS | Hard |
-| P1-FR6 | Display a mobile lock-screen activity for the active commute | P1-FR4 | Android App Widget | Hard |
-| P1-FR7 | Lock-screen activity shows vehicle position, status, expected arrival, last update time | P1-FR6 | Android App Widget | Medium |
+| P1-FR6 | Display an Android AppWidget for the active commute (visible on home screen; on lock screen where the OS provides that surface — Android 16 QPR1+ phones via opt-out, Samsung One UI lockscreen-widgets panel, etc.) | P1-FR4 | Android App Widget | Hard |
+| P1-FR7 | AppWidget shows vehicle position on route, ETA to user's stop, on-time/early/late state vs. schedule, deviations | P1-FR6 | Android App Widget, SL Transport, SL Deviations | Medium |
 | P1-FR8 | Notify/warn user when vehicle is delayed, cancelled, missing, or has uncertain data | P1-FR4, P1-FR10 | SL Deviations | Medium |
 | P1-FR9 | Display disruption or cancellation information from the traffic disruption API | P1-FR2 | SL Deviations | Medium |
 | P1-FR10 | Clearly mark live data as uncertain when position is missing, stale, inconsistent, or off-route | P1-FR4 | Logic only | Medium |
@@ -102,9 +102,10 @@
 | Constraint | Affects | Detail |
 |---|---|---|
 | GTFS Realtime uses protobuf (binary format) | Step 5 | Not plain JSON — requires a protobuf parsing library (e.g. `google-protobuf` or GTFS-RT Kotlin bindings). Plan for this in Step 5. |
-| App Widget minimum refresh = 30 minutes (standard timer only) | Step 8 | The built-in widget auto-refresh timer is capped at 30 minutes. This does NOT apply when a foreground service pushes updates — use a foreground service to push widget updates every 30–60 seconds during active commute. Foreground service requires a persistent notification while running (Android mandatory). |
+| App Widget minimum refresh = 30 minutes (standard timer only); WorkManager minimum periodic interval = 15 minutes | Step 8a | The built-in widget auto-refresh timer is capped at 30 minutes. WorkManager `PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS` is 900_000 (15 minutes) — enforced, cannot be bypassed. Sub-minute widget refresh is therefore impossible from deferrable background work. Use a **foreground service** that runs the existing `LivePositionTracker` polling loop and calls `AppWidgetManager.updateAppWidget(...)` on each tick. Persistent notification required while service runs (Android mandatory). Gated to active-commute window per NFR10. |
 | INTERNET permission required | Step 2 onwards | Must be declared in `AndroidManifest.xml` before any API calls will work. |
 | GTFS Regional Static dataset is large (~49 MB compressed, ~300–500 MB unzipped; `stop_times.txt` is 5–15 million rows) | Step 4a | Too large to download and parse on a low-spec emulator. Decision: pre-process on a developer machine (Gradle task or standalone script) that downloads `sl.zip`, extracts only the needed columns from `routes.txt` / `trips.txt` / `shapes.txt` / `stops.txt` / `stop_times.txt`, and writes a compact JSON to `app/src/main/assets/`. The app only reads the small JSON at runtime. Refresh = re-run the extractor and ship a new app version. |
+| Widget route line + time-scale gauge must be Canvas-rendered bitmaps | Step 8b | RemoteViews has no polyline-drawing primitive (only basic widget views: TextView, ImageView, Button, ProgressBar, ListView, etc.). Glance has no `Canvas` composable for the same underlying reason. Pattern: render to `android.graphics.Canvas` → `Bitmap` → `RemoteViews.setImageViewBitmap()` per widget refresh. |
 
 ---
 
@@ -152,8 +153,25 @@ Step 6 — Live position on map (P1-FR5, DS.Req.5, P1-FR10)
 Step 7 — Disruptions (P1-FR8, P1-FR9, DS.Req.6)
   Connect SL Deviations API, show warnings and cancellations
 
-Step 8 — Lock screen widget (P1-FR6, P1-FR7)
-  Android App Widget + foreground service that polls every 30–60s and pushes updates to the widget during active commute window
+Step 8a — Foreground service + widget state derivation (P1-FR6, P1-FR7)
+  Background service runs LivePositionTracker outside the activity lifecycle during the
+  active commute window. Persistent notification (Android-mandatory). New
+  WidgetCommuteState derived from (TrackingState.Polling.vehicles + SL Departures
+  predictions + Deviations + matched-direction stop sequence). Includes single-vehicle
+  selection ("vehicle lock" pattern from the design handoff — pin one trip_id at window
+  start so the widget marker doesn't jump as buses cycle through) and busIndex
+  interpolation along the polyline. Widget config piggybacks the existing CommuteConfig
+  store — no parallel DataStore. One widget instance per saved CommuteConfig (multiple
+  widgets for users with multiple commutes).
+
+Step 8b — AppWidget surface (P1-FR6, P1-FR7)
+  Classic RemoteViews + XML layout, AppWidgetProvider, manifest declaration. Canvas-
+  rendered bitmaps for the route line and the time-scale (delta-vs-schedule) gauge
+  per the design handoff. Seven phase states per the handoff state table:
+  OnTime / Late / Early / LeaveNow / Deviation / Passed / Dormant. Tech stack chosen
+  over Jetpack Glance for lower scaffolding cost (project has no Compose surface today)
+  and better-Googled failure modes; aesthetic loss is zero because both frameworks
+  bitmap-render the route geometry.
 
 Step 9 — Lock screen → app link (P1-FR11)
   Tap widget opens the app on the map view
@@ -177,7 +195,8 @@ Step 10 — Polish (NFR1–6)
 | Step 5 | Done (runtime tested 2026-05-07) | step-5-live-data | Live GTFS-RT polling for the active commute. Smoke test, then full implementation: `GtfsRealtimeRepository` (OkHttp + `org.mobilitydata:gtfs-realtime-bindings`), `LivePositionTracker` (active-commute selector + 20s polling coroutine, gated to active window AND foreground), `TrackingState` sealed class, MainActivity wiring with bottom-screen verification overlay + 1s age ticker. Asset regenerated once for tripIds extension, once for BUG-005 final-stop headsign fallback. SlLineRepository changed to `Map<String, List<SlLineEntry>>` for multi-route designation handling, with transport-mode + stop-sequence-aware direction matching (the latter being the documentation-aligned approach Trafiklab recommends — discovered after BUG-009's three-version fix arc). Commute removal UI added (tap "Commutes" button). Two bugs fixed (BUG-005, BUG-009), one deferred (BUG-008 polyline overlap). Runtime confirmed: line 57 → Sofia from Tullgårdsparken correctly tracks 3 buses going direction_id=1 (Tengdahlsgatan-bound, Sofia is intermediate). |
 | Step 6 | Done (runtime tested 2026-05-07) | step-6-live-vehicles-on-map | Live vehicles drawn on the map: filled coloured dot per vehicle (matches commute polyline colour), greyed out when `quality=UNCERTAIN`, directional notch + rotation when GTFS-RT bearing is reported. Auto-fit camera fires once per active commute session, fitting the polyline + visible vehicles. `bearing: Float?` added to `VehiclePosition`; `GtfsRealtimeRepository` reads `position.bearing` when present. Polish bundle on the same branch fixed 4 UI bugs: BUG-002 (zoom-out cluster, fixed via `MIN_STOP_ZOOM = 14.0`), BUG-003 (default OSMDroid pin too large, fixed via 6 dp blue-grey dot), BUG-010 NEW (vehicle InfoWindow couldn't close, fixed via `MapEventsOverlay`), BUG-011 NEW (osmdroid built-in zoom controls overlapped live_status, fixed via custom always-visible buttons + 72 dp bottom margin). One observation deferred as BUG-012 (vehicle markers often render `UNCERTAIN` even on fresh polls — likely SL feed timestamp lag vs our 60 s threshold). Runtime confirmed on two distinct commutes (line 57 → Sofia from Tullgårdsparken, then line 57 → Hjorthagen from Mjärdgränd). Three commits on branch: `9d70326` core, `874239a` polish bundle, `93adedd` runtime-confirmation status. |
 | Step 7 | Done (runtime tested 2026-05-07) | step-7-deviations | SL Deviations API integrated. New `Deviation` model + `MessageVariant`. New `SlDeviationsRepository` (OkHttp + Gson, ETag-aware conditional GET → 304 = NotModified, 200 = Modified). Server-side filter: `?line=<id>&future=true` (site param dropped after runtime test — see PLAN.md change log entry below). Client-side filter: drop deviations whose `publish.upto` is in the past or whose `publish.from` is after the active commute's next end-time (handles cross-midnight windows). Polling: every 60s (every 3rd vehicle tick at 20s baseline) inside `LivePositionTracker.pollOnce`, gated to active-commute-window AND foreground (NFR10), within docs cap of 1/min. `TrackingState.Polling` extended with `deviations: List<Deviation>` (default empty for back-compat). UI: top warning bar (`deviation_card`, MaterialCardView, amber-yellow background `#FFB300` with deep-orange `(!)` accent `#E64A19`) under the search bar — hidden when none, shows the highest-importance header (Swedish), `+N` count badge if >1, tap-to-expand details (concatenated header+details for all matching deviations). Vehicle markers also get a small `(!)` badge inside the existing 26 dp dot at bottom-right (rotates with the icon when bearing reported — acceptable since the badge meaning doesn't depend on orientation). Build verified clean. **Cross-system ID sanity check: PASSED** — first runtime test confirmed line=57 / line=17 returned 200 OK (no 4xx/5xx), and an unfiltered API check confirmed both lines have entries with `id=57 designation="57"` and `id=17 designation="17"`. SL Transport `line.id` and Deviations `scope.lines[].id` share the SL integer namespace as inferred. |
-| Step 8 | Not started | — | |
+| Step 8a | Not started | — | |
+| Step 8b | Not started | — | |
 | Step 9 | Not started | — | |
 | Step 10 | Not started | — | |
 | Phase 2 | Not started | — | After Phase 1 complete |

@@ -45,7 +45,15 @@ object WidgetRenderer {
                 }
             }
         )
-        views.setTextViewText(R.id.widget_scheduled, "")
+        // Header right slot: scheduled clock time, plus an arrow + estimated
+        // when the prediction differs (e.g. "07:54 → 07:56" when 2 min late).
+        val scheduledHeader = when {
+            state.scheduledClockTime != null && state.estimatedClockTime != null ->
+                "${state.scheduledClockTime} → ${state.estimatedClockTime}"
+            state.scheduledClockTime != null -> state.scheduledClockTime
+            else -> ""
+        }
+        views.setTextViewText(R.id.widget_scheduled, scheduledHeader)
 
         // --- 2. Route line gauge — Canvas bitmap. ---
         val density = context.resources.displayMetrics.density
@@ -96,7 +104,7 @@ object WidgetRenderer {
             views.setViewVisibility(R.id.widget_time_scale, View.INVISIBLE)
         }
 
-        // --- 4c. Delta label ---
+        // --- 4c. Delta label, with optional GPS-age suffix ---
         val deltaText = when {
             state.phase == Phase.Dormant -> "off-window"
             state.phase == Phase.Passed -> ""
@@ -105,7 +113,21 @@ object WidgetRenderer {
             state.deltaMinutes <= -1 -> "${state.deltaMinutes}′ early"
             else -> "on time"
         }
-        views.setTextViewText(R.id.widget_delta, deltaText)
+        val ageSuffix = state.vehicleAgeSeconds?.takeIf {
+            state.phase != Phase.Dormant && state.phase != Phase.Passed
+        }?.let { age ->
+            when {
+                age < 60 -> "${age}s"
+                age < 600 -> "${age / 60}m"
+                else -> "stale"
+            }
+        }
+        val deltaCombined = when {
+            ageSuffix == null -> deltaText
+            deltaText.isBlank() -> ageSuffix
+            else -> "$deltaText · $ageSuffix"
+        }
+        views.setTextViewText(R.id.widget_delta, deltaCombined)
 
         // --- 5. Deviation pill ---
         val deviation = state.deviation

@@ -66,7 +66,25 @@ data class WidgetCommuteState(
     /** Highest-importance deviation summary, or null if no deviations apply. */
     val deviation: WidgetDeviationSummary?,
     /** Computed render variant — see [Phase] for derivation order. */
-    val phase: Phase
+    val phase: Phase,
+    /**
+     * Scheduled clock time of the next departure at the user's stop,
+     * formatted "HH:mm" (24-hour, Stockholm local). null when no upcoming
+     * departure could be matched.
+     */
+    val scheduledClockTime: String? = null,
+    /**
+     * Estimated clock time, formatted "HH:mm". null when SL has no live
+     * prediction yet OR the prediction equals scheduled (= on time, no
+     * point cluttering the header with the same value twice).
+     */
+    val estimatedClockTime: String? = null,
+    /**
+     * Seconds since the locked vehicle's last GPS fix (from the GTFS-RT
+     * feed's `vehicle.timestamp`, NOT our poll time — SL's feed lags the
+     * actual GPS by 30–90s per BUG-012). null when no vehicle is tracked.
+     */
+    val vehicleAgeSeconds: Int? = null
 )
 
 /** Compact summary of one or more SL deviations affecting the active line. */

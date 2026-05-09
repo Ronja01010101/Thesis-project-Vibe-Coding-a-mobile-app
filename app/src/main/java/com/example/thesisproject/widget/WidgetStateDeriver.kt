@@ -25,11 +25,13 @@ object WidgetStateDeriver {
 
     /**
      * Maximum stops shown on the route gauge ending at the user's stop.
-     * BUG-028: bumped from 5 to 7 so additional vehicles on high-frequency
-     * lines (metro 17, busy bus lines) have more room to render alongside
-     * the locked vehicle without crowding.
+     * Originally 5 (BUG-014), bumped to 7 in BUG-028 to give multi-vehicle
+     * markers more room — runtime testing on 2026-05-09 showed 7 was
+     * actually too crowded and the live bus position read less clearly.
+     * Reverted to 5; additional-vehicle markers (BUG-028) still draw, just
+     * within the tighter window.
      */
-    private const val WINDOW_SIZE = 7
+    private const val WINDOW_SIZE = 5
 
     private val CLOCK_FORMATTER = DateTimeFormatter.ofPattern("HH:mm")
 

@@ -1,7 +1,12 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Base application theme. -->
+    <!-- Base application theme (night). -->
     <style name="Base.Theme.ThesisProject" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your dark theme here. -->
-        <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
+        <!-- BUG-026: SL-blue primary replaces the Material 3 purple default.
+             Dark-mode variant uses the lighter shade so text/icons stay
+             legible against dark surfaces. -->
+        <item name="colorPrimary">@color/sl_blue_light</item>
+        <item name="colorOnPrimary">@color/sl_blue_dark</item>
+        <item name="colorPrimaryContainer">@color/sl_blue_dark</item>
+        <item name="colorOnPrimaryContainer">@color/sl_blue_light</item>
     </style>
 </resources>

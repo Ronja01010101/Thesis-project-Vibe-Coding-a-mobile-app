@@ -93,7 +93,25 @@ data class WidgetCommuteState(
      * instead of sitting frozen between the foreground service's 20-s
      * refreshes.
      */
-    val vehicleTimestampMs: Long? = null
+    val vehicleTimestampMs: Long? = null,
+    /**
+     * BUG-028: window-local indices for ALL non-locked vehicles whose
+     * busIndex falls inside [windowStart .. userStopIndex]. Drawn as
+     * smaller, neutral-coloured markers on the gauge so the user sees
+     * "yes, there's another bus 4 stops behind the one we're tracking".
+     * The locked vehicle's index is in [visibleBusIndex] and is NOT in
+     * this list — drawn separately with phase colour and line text.
+     */
+    val additionalBusIndices: List<Float> = emptyList(),
+    /**
+     * BUG-028: clock-time strings ("HH:mm") for upcoming departures AFTER
+     * the hero, fed into the widget's "Next:" line. Empty when SL has no
+     * additional upcoming departures (low-frequency lines, or end of
+     * service day). Intentionally excludes the hero's departure — that's
+     * already shown via [scheduledClockTime] / [estimatedClockTime] +
+     * [etaMinutes].
+     */
+    val nextDepartureClockTimes: List<String> = emptyList()
 )
 
 /** Compact summary of one or more SL deviations affecting the active line. */

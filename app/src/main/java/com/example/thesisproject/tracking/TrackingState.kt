@@ -42,7 +42,15 @@ sealed class TrackingState {
          * deriver doesn't have to re-run catalog matching. Null only on
          * legacy-state shapes that predate Step 8a.
          */
-        val matchedDirection: SlDirection? = null
+        val matchedDirection: SlDirection? = null,
+        /**
+         * BUG-028: next 2-3 predicted departures of the active line+direction
+         * at the user's stop, sorted by scheduledTime. First entry equals
+         * [nextDeparture]; subsequent entries feed the widget's "Next:" line
+         * for high-frequency lines where multiple buses pass in the user's
+         * window. Empty when SL has no upcoming departures.
+         */
+        val upcomingDepartures: List<Departure> = emptyList()
     ) : TrackingState()
 
     /** A fetch failed or the active commute couldn't be matched to the catalog. */

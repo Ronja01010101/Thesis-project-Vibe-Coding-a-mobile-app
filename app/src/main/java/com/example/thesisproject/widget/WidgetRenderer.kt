@@ -161,6 +161,21 @@ object WidgetRenderer {
         }
         views.setTextViewText(R.id.widget_delta, deltaText)
 
+        // --- 5d. Next-departures line (BUG-028) — "Next: 18:42 · 18:47"
+        // for upcoming departures after the hero. Hidden in Dormant
+        // (nothing to track). Visible in Phase.Passed because that's
+        // exactly when the user wants to see "missed it — when's next?".
+        val nextTimes = state.nextDepartureClockTimes
+        if (nextTimes.isNotEmpty() && state.phase != Phase.Dormant) {
+            views.setTextViewText(
+                R.id.widget_next_departures,
+                "Next: ${nextTimes.joinToString(" · ")}"
+            )
+            views.setViewVisibility(R.id.widget_next_departures, View.VISIBLE)
+        } else {
+            views.setViewVisibility(R.id.widget_next_departures, View.GONE)
+        }
+
         // --- 6. GPS-age caption — Chronometer auto-ticks "Updated MM:SS ago"
         // every second inside the launcher's process. We only set the base
         // when we have a real GPS timestamp from SL; otherwise the line is
@@ -221,6 +236,7 @@ object WidgetRenderer {
         views.setViewVisibility(R.id.widget_scheduled_label, View.GONE)
         views.setViewVisibility(R.id.widget_hero_label, View.GONE)
         views.setViewVisibility(R.id.widget_stops_away, View.GONE)
+        views.setViewVisibility(R.id.widget_next_departures, View.GONE)
         views.setViewVisibility(R.id.widget_gps_age, View.GONE)
         views.setViewVisibility(R.id.widget_deviation, View.GONE)
     }

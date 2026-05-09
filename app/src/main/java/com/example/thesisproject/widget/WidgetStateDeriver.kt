@@ -23,8 +23,13 @@ import kotlin.math.ceil
  */
 object WidgetStateDeriver {
 
-    /** Maximum stops shown on the route gauge ending at the user's stop. */
-    private const val WINDOW_SIZE = 5
+    /**
+     * Maximum stops shown on the route gauge ending at the user's stop.
+     * BUG-028: bumped from 5 to 7 so additional vehicles on high-frequency
+     * lines (metro 17, busy bus lines) have more room to render alongside
+     * the locked vehicle without crowding.
+     */
+    private const val WINDOW_SIZE = 7
 
     private val CLOCK_FORMATTER = DateTimeFormatter.ofPattern("HH:mm")
 
@@ -102,6 +107,23 @@ object WidgetStateDeriver {
             stopsAwayFromUser = null
         }
 
+        // BUG-028: project ALL other vehicles into the visible window so
+        // additional approaching buses render as smaller muted markers on
+        // the gauge. Excludes the locked vehicle (rendered separately with
+        // phase colour + line text) and anything outside the window or past
+        // the user's stop.
+        val lockedVehicle = locked?.first
+        val additionalBusIndices: List<Float> = if (visibleStopCount == 0) {
+            emptyList()
+        } else {
+            state.vehicles.asSequence()
+                .filter { it !== lockedVehicle && it != lockedVehicle }
+                .mapNotNull { v -> computeBusIndex(v.lat, v.lon, stops) }
+                .filter { it in windowStart.toFloat()..userStopIndex.toFloat() }
+                .map { (it - windowStart).coerceIn(0f, (visibleStopCount - 1).toFloat()) }
+                .toList()
+        }
+
         val nextDep = state.nextDeparture
         val etaMin = nextDep?.let { dep ->
             val target = dep.estimatedTime ?: dep.scheduledTime
@@ -116,6 +138,16 @@ object WidgetStateDeriver {
         val scheduledClock = nextDep?.scheduledTime?.format(CLOCK_FORMATTER)
         val estimatedClock = nextDep?.estimatedTime?.format(CLOCK_FORMATTER)
             ?.takeIf { it != scheduledClock }
+
+        // BUG-028: clock times for the "Next:" line — upcoming departures
+        // AFTER the hero. Skip the head (already shown as scheduled/eta);
+        // format the rest as "HH:mm". Prefer estimated when available so
+        // the user sees the predicted time rather than the timetable.
+        val nextDepartureClockTimes: List<String> = state.upcomingDepartures
+            .drop(1)
+            .map { dep ->
+                (dep.estimatedTime ?: dep.scheduledTime).format(CLOCK_FORMATTER)
+            }
 
         val deviationSummary = state.deviations
             .takeIf { it.isNotEmpty() }
@@ -149,7 +181,9 @@ object WidgetStateDeriver {
             phase = phase,
             scheduledClockTime = scheduledClock,
             estimatedClockTime = estimatedClock,
-            vehicleTimestampMs = vehicleTimestampMs
+            vehicleTimestampMs = vehicleTimestampMs,
+            additionalBusIndices = additionalBusIndices,
+            nextDepartureClockTimes = nextDepartureClockTimes
         )
     }
 

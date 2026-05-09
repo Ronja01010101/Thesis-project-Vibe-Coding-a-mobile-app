@@ -99,9 +99,14 @@ class GtfsRealtimeRepository(
         private const val TAG = "LiveTracking"
         private const val ENDPOINT = "https://opendata.samtrafiken.se/gtfs-rt/sl/VehiclePositions.pb"
         private const val DATA_SOURCE = "GTFS-RT SL"
-        // Position older than 60s is flagged UNCERTAIN. Tunable later when
-        // we have more empirical data on how often the feed lags reality.
-        private const val STALE_THRESHOLD_MS = 60_000L
+        // BUG-012: bumped from 60s → 120s. The 60s threshold flagged most
+        // fresh polls as UNCERTAIN because SL's GTFS-RT feed populates
+        // `vehicle.timestamp` with the bus's last GPS report time, which
+        // can lag the feed emit time by 30-90s in normal Stockholm
+        // service. 120s is a working starting point; principled tuning
+        // would log the distribution of nowMs - tsMs over a few hours
+        // and pick the 95th percentile of "actually-fresh" data.
+        private const val STALE_THRESHOLD_MS = 120_000L
 
         private fun defaultClient(): OkHttpClient = OkHttpClient.Builder()
             .connectTimeout(15, TimeUnit.SECONDS)

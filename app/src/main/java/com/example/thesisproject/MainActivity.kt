@@ -1,6 +1,7 @@
 package com.example.thesisproject
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -158,11 +159,19 @@ class MainActivity : AppCompatActivity() {
     private val commutePolylines: MutableMap<Int, List<GeoPoint>> = mutableMapOf()
     private var lastFittedCommuteKey: String? = null
 
+    // Set true when the user opened the app via a widget tap on an
+    // actively-tracked commute (EXTRA_FOCUS_TRACKED_VEHICLE). On the next
+    // Polling state with vehicles, the map zooms to the locked vehicle
+    // instead of running the default route auto-fit. One-shot — cleared
+    // after applying so subsequent state updates don't re-zoom.
+    private var pendingVehicleFocus: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Configuration.getInstance().load(this, PreferenceManager.getDefaultSharedPreferences(this))
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
+        readWidgetIntentExtras(intent)
 
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
             val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
@@ -557,12 +566,35 @@ class MainActivity : AppCompatActivity() {
      * isn't in the cache yet (rebuildCommuteOverlays is async and may not have
      * finished), we defer the fit to the next state emission instead of zooming
      * to vehicles only.
+     *
+     * When the user arrived via a widget tap with EXTRA_FOCUS_TRACKED_VEHICLE,
+     * we instead zoom in close on the tracked vehicle (zoom 17, ~street-level).
+     * One-shot per arrival — the pending flag is cleared after applying so
+     * subsequent ticks don't re-zoom.
      */
     private fun maybeAutoFit(state: TrackingState) {
         if (state !is TrackingState.Polling) {
             lastFittedCommuteKey = null
             return
         }
+
+        if (pendingVehicleFocus) {
+            val tracked = WidgetStateDeriver.pickTrackedVehicle(state, state.matchedDirection)
+            if (tracked != null) {
+                map.controller.setZoom(VEHICLE_FOCUS_ZOOM)
+                map.controller.animateTo(GeoPoint(tracked.lat, tracked.lon))
+                // Suppress the route auto-fit for this commute session so
+                // we don't re-zoom out to the full polyline on the next tick.
+                lastFittedCommuteKey = state.activeCommute.fitKey()
+                pendingVehicleFocus = false
+                return
+            }
+            // No vehicle yet — keep the flag and try again on the next tick.
+            // Don't fall through to route-fit; the user explicitly asked to
+            // see the vehicle, not the whole route.
+            return
+        }
+
         val key = state.activeCommute.fitKey()
         if (key == lastFittedCommuteKey) return
 
@@ -580,6 +612,27 @@ class MainActivity : AppCompatActivity() {
         // the live-status overlay at bottom without hiding the route's endpoints.
         map.zoomToBoundingBox(box, true, 80)
         lastFittedCommuteKey = key
+    }
+
+    override fun onNewIntent(newIntent: Intent) {
+        super.onNewIntent(newIntent)
+        // Same-task re-entry (e.g. widget tap while the app is already
+        // running). Update the activity's intent so future getIntent()
+        // calls see the new extras, and read the widget-focus flag if
+        // present.
+        setIntent(newIntent)
+        readWidgetIntentExtras(newIntent)
+        // If we're already in a Polling state, apply the focus right
+        // away rather than waiting for the next tick.
+        if (pendingVehicleFocus && lastTrackingState is TrackingState.Polling) {
+            maybeAutoFit(lastTrackingState)
+        }
+    }
+
+    private fun readWidgetIntentExtras(source: Intent?) {
+        if (source?.getBooleanExtra(EXTRA_FOCUS_TRACKED_VEHICLE, false) == true) {
+            pendingVehicleFocus = true
+        }
     }
 
     private fun CommuteConfig.fitKey(): String =
@@ -914,6 +967,19 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        /**
+         * Intent extra. When set true on the MainActivity launch intent
+         * (e.g. by [CommuteAppWidgetProvider] on widget tap), the next
+         * Polling state with a tracked vehicle will zoom the map onto
+         * that vehicle at street-level instead of running the default
+         * route auto-fit.
+         */
+        const val EXTRA_FOCUS_TRACKED_VEHICLE = "focus_tracked_vehicle"
+
+        /** Zoom level used when focusing on a tracked vehicle. ~17 is
+         *  street-level, comfortable for "where is my bus right now". */
+        private const val VEHICLE_FOCUS_ZOOM = 17.0
+
         private const val STOCKHOLM_LAT = 59.3293
         private const val STOCKHOLM_LON = 18.0686
         private const val MAX_MARKERS = 400

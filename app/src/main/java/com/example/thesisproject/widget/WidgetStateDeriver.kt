@@ -203,6 +203,25 @@ object WidgetStateDeriver {
     }
 
     /**
+     * Public entry point: pick the [VehiclePosition] the deriver would
+     * lock onto for [polling]'s active commute. Used by MainActivity for
+     * widget-tap "zoom to tracked vehicle" — guarantees the same picker
+     * logic as what the widget surface displays. Returns null when there
+     * are no tracked vehicles or no static stops loaded yet.
+     */
+    fun pickTrackedVehicle(
+        polling: TrackingState.Polling,
+        direction: SlDirection?
+    ): com.example.thesisproject.model.VehiclePosition? {
+        val stops = direction?.stops.orEmpty()
+        val cfg = polling.activeCommute
+        val userStopIndex = cfg.stopName?.takeIf { it.isNotBlank() }?.let { name ->
+            stops.indexOfFirst { it.name.equals(name, ignoreCase = true) }
+        }?.takeIf { it >= 0 } ?: 0
+        return pickLockedVehicle(polling.vehicles, stops, userStopIndex)?.first
+    }
+
+    /**
      * Pick the most relevant bus to "lock onto" from the matched direction's
      * tracked vehicles, returning both the [VehiclePosition] (so callers can
      * read its [VehiclePosition.timestampMs] for GPS-age display) and its

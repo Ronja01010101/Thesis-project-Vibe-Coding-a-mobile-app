@@ -126,6 +126,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deviationCount: TextView
     private lateinit var deviationDetails: TextView
     private var deviationDetailsExpanded: Boolean = false
+    // BUG-027: tracks the last-rendered deviation set so the expansion state
+    // resets on set changes (auto-expand when count > 1) but not on every
+    // 20s repoll, preserving the user's manual collapse choice.
+    private var lastDeviationSetKey: String = ""
 
     // Step 8a: runtime grant for POST_NOTIFICATIONS (Android 13+). Without it,
     // foreground-service notifications are hidden even though the service runs.
@@ -327,12 +331,24 @@ class MainActivity : AppCompatActivity() {
         if (deviations.isEmpty()) {
             deviationCard.visibility = View.GONE
             deviationDetailsExpanded = false
+            lastDeviationSetKey = ""
             deviationDetails.visibility = View.GONE
             return
         }
         // Highest-importance first (per docs, importance_level is the only
         // priority field meant for sorting). Nulls last.
         val sorted = deviations.sortedByDescending { it.importanceLevel ?: Int.MIN_VALUE }
+        // BUG-027: auto-expand the details panel whenever the set of active
+        // deviations changes AND contains more than one — user wanted all
+        // visible without an extra tap. Single-deviation cards stay
+        // collapsed (header alone is informative). Keyed by
+        // (deviationCaseId, version) so re-polls with the same set don't
+        // override a manual collapse.
+        val setKey = sorted.joinToString("|") { "${it.deviationCaseId}:${it.version}" }
+        if (setKey != lastDeviationSetKey) {
+            deviationDetailsExpanded = sorted.size > 1
+            lastDeviationSetKey = setKey
+        }
         val primary = sorted.first().preferredVariant("sv")
         deviationHeader.text = primary?.header.orEmpty()
         deviationCard.visibility = View.VISIBLE

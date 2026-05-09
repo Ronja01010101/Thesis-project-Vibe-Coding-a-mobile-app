@@ -4,9 +4,11 @@ import android.util.Log
 import com.example.thesisproject.model.CommuteConfig
 import com.example.thesisproject.model.Departure
 import com.example.thesisproject.model.Deviation
+import com.example.thesisproject.model.TripAlert
 import com.example.thesisproject.model.isInWindow
 import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.GtfsRealtimeRepository
+import com.example.thesisproject.repository.ServiceAlertsRepository
 import com.example.thesisproject.repository.SlDeviationsRepository
 import com.example.thesisproject.repository.SlLineRepository
 import com.example.thesisproject.repository.StopRepository
@@ -45,6 +47,7 @@ class LivePositionTracker(
     private val lineRepository: SlLineRepository,
     private val realtimeRepository: GtfsRealtimeRepository,
     private val deviationsRepository: SlDeviationsRepository,
+    private val serviceAlertsRepository: ServiceAlertsRepository,
     private val stopRepository: StopRepository,
     private val apiKey: String,
     private val pollIntervalMs: Long = DEFAULT_POLL_INTERVAL_MS,
@@ -71,6 +74,11 @@ class LivePositionTracker(
     private var cachedUpcomingDepartures: List<Departure> = emptyList()
     private var cachedDepartureKey: Triple<String, String, Int?>? = null
 
+    // Trip-level alerts cached on the same cadence as deviations. The feed
+    // is fetched whole (it's small — ~80 KB at the spike, all SL alerts);
+    // filtering against active trip_ids happens client-side per tick.
+    private var cachedAllTripAlerts: List<TripAlert> = emptyList()
+
     fun start(scope: CoroutineScope) {
         if (pollingJob?.isActive == true) return
         pollingJob = scope.launch {
@@ -89,6 +97,7 @@ class LivePositionTracker(
         cachedDeviationKey = null
         cachedUpcomingDepartures = emptyList()
         cachedDepartureKey = null
+        cachedAllTripAlerts = emptyList()
         tickCount = 0L
         _state.value = TrackingState.Idle
     }
@@ -104,6 +113,7 @@ class LivePositionTracker(
             cachedDeviationKey = null
             cachedUpcomingDepartures = emptyList()
             cachedDepartureKey = null
+            cachedAllTripAlerts = emptyList()
             _state.value = TrackingState.NoActiveCommute(configs.size)
             return
         }
@@ -172,6 +182,18 @@ class LivePositionTracker(
         if (shouldFetchDeparture) {
             fetchUpcomingDepartures(active)
         }
+
+        // Trip-level alerts: same 60s cadence as deviations + departures.
+        // Filter the cached feed against the matched direction's tripIds —
+        // tripIds change per (route, direction) so we re-filter each tick.
+        val shouldFetchTripAlerts = keyChanged || tickCount % TRIP_ALERT_POLL_RATIO == 0L
+        if (shouldFetchTripAlerts) {
+            fetchTripAlerts()
+        }
+        val matchedTripIds = direction.tripIds.toHashSet()
+        val tripAlerts = cachedAllTripAlerts.filter { alert ->
+            alert.tripIds.any { it in matchedTripIds }
+        }
         tickCount++
 
         _state.value = TrackingState.Polling(
@@ -181,8 +203,18 @@ class LivePositionTracker(
             deviations = cachedDeviations,
             nextDeparture = cachedUpcomingDepartures.firstOrNull(),
             matchedDirection = direction,
-            upcomingDepartures = cachedUpcomingDepartures
+            upcomingDepartures = cachedUpcomingDepartures,
+            tripAlerts = tripAlerts
         )
+    }
+
+    private suspend fun fetchTripAlerts() {
+        try {
+            cachedAllTripAlerts = serviceAlertsRepository.fetchTripAlerts(apiKey)
+            Log.d(TAG, "trip alerts: ${cachedAllTripAlerts.size} fetched (filtered to tripIds at use site)")
+        } catch (e: Exception) {
+            Log.w(TAG, "Trip-alerts fetch failed (keeping cache)", e)
+        }
     }
 
     private suspend fun fetchUpcomingDepartures(active: CommuteConfig) {
@@ -284,5 +316,7 @@ class LivePositionTracker(
         // BUG-028: how many upcoming departures to fetch. 3 = the hero
         // (currently arriving) + 2 in the "Next:" line. More would clutter.
         private const val UPCOMING_DEPARTURE_COUNT = 3
+        // Trip alerts: same 60s cadence as deviations + departures.
+        private const val TRIP_ALERT_POLL_RATIO = 3L
     }
 }

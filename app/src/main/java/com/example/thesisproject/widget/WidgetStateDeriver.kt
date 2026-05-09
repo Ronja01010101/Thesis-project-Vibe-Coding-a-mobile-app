@@ -151,15 +151,27 @@ object WidgetStateDeriver {
                 (dep.estimatedTime ?: dep.scheduledTime).format(CLOCK_FORMATTER)
             }
 
-        val deviationSummary = state.deviations
-            .takeIf { it.isNotEmpty() }
-            ?.let { devs ->
-                val top = devs.maxByOrNull { it.importanceLevel ?: Int.MIN_VALUE }
+        // Priority for the widget pill: trip-level alerts (from GTFS-RT
+        // ServiceAlerts.pb, filtered to tracked trip_ids) trump line-level
+        // deviations. Trip-matched alerts are "this affects YOUR specific
+        // bus" and more relevant than a line-wide notice. Header gets a ★
+        // prefix on the widget pill so the user has a visual cue that the
+        // alert is bus-specific. Total count combines both sources.
+        val totalAlertCount = state.deviations.size + state.tripAlerts.size
+        val deviationSummary = when {
+            state.tripAlerts.isNotEmpty() -> WidgetDeviationSummary(
+                header = "★ ${state.tripAlerts.first().header}",
+                totalCount = totalAlertCount
+            )
+            state.deviations.isNotEmpty() -> {
+                val top = state.deviations.maxByOrNull { it.importanceLevel ?: Int.MIN_VALUE }
                 WidgetDeviationSummary(
                     header = top?.preferredVariant("sv")?.header.orEmpty(),
-                    totalCount = devs.size
+                    totalCount = totalAlertCount
                 )
             }
+            else -> null
+        }
 
         val isCancelled = nextDep?.status == DepartureStatus.CANCELLED
         val phase = computePhase(

@@ -584,3 +584,164 @@ tasks.register("smokeTestRealtime") {
         }
     }
 }
+
+// =====================================================================
+// Step 10 / BUG-028 follow-up: GTFS Realtime ServiceAlerts smoke test
+//
+// Run on a developer machine: ./gradlew smokeTestServiceAlerts
+//
+// Empirical question: does SL populate `informed_entity.trip.trip_id` in
+// the ServiceAlerts.pb feed? Trafiklab's docs are silent on which
+// EntitySelector fields SL fills. If trip_ids are present, we could
+// surface trip-level alerts on the widget by matching against the
+// trip_ids we already track from VehiclePositions. If only line/stop
+// selectors are populated, the SL Deviations API line-level surface
+// (Step 7) is already the smallest granularity available.
+// =====================================================================
+
+tasks.register("smokeTestServiceAlerts") {
+    group = "build setup"
+    description = "Inspects the SL GTFS-RT ServiceAlerts feed for informed_entity granularity."
+
+    doLast {
+        val key = (localProperties["GTFS_REALTIME_KEY"] as? String).orEmpty()
+        check(key.isNotBlank()) { "GTFS_REALTIME_KEY missing in local.properties" }
+
+        val url = URI.create("https://opendata.samtrafiken.se/gtfs-rt/sl/ServiceAlerts.pb?key=$key").toURL()
+        val connection = url.openConnection() as HttpURLConnection
+        connection.requestMethod = "GET"
+        connection.setRequestProperty("Accept", "application/octet-stream, */*")
+        connection.setRequestProperty("Accept-Encoding", "gzip, deflate")
+        connection.setRequestProperty("User-Agent", "thesis-project-android-smokeTestServiceAlerts/1.0")
+        connection.connectTimeout = 30_000
+        connection.readTimeout = 60_000
+
+        try {
+            val code = connection.responseCode
+            val contentType = connection.contentType
+            val contentLength = connection.contentLength
+            val contentEncoding = connection.contentEncoding
+
+            logger.lifecycle("HTTP $code  Content-Type=$contentType  Content-Length=$contentLength  Content-Encoding=$contentEncoding")
+
+            if (code != 200) {
+                val errorBody = connection.errorStream?.bufferedReader(StandardCharsets.UTF_8)?.use { it.readText() }
+                logger.lifecycle("Body: ${errorBody?.take(500) ?: "(empty)"}")
+                error("ServiceAlerts API returned HTTP $code (key length=${key.length}). See body above.")
+            }
+
+            val raw = connection.inputStream
+            val decoded = when (contentEncoding) {
+                "gzip" -> GZIPInputStream(raw)
+                "deflate" -> InflaterInputStream(raw)
+                else -> raw
+            }
+            val bytes = decoded.use { it.readBytes() }
+            logger.lifecycle("Decoded body: ${bytes.size} bytes")
+
+            val feed = com.google.transit.realtime.GtfsRealtime.FeedMessage.parseFrom(bytes)
+            val header = feed.header
+            logger.lifecycle("Feed version: ${header.gtfsRealtimeVersion}")
+            logger.lifecycle("Feed timestamp: ${header.timestamp} (${Instant.ofEpochSecond(header.timestamp)})")
+            logger.lifecycle("Entity count: ${feed.entityCount}")
+
+            val alertEntities = feed.entityList.filter { it.hasAlert() }
+            logger.lifecycle("Entities with alert: ${alertEntities.size}")
+            if (alertEntities.isEmpty()) {
+                logger.lifecycle("No alerts in feed right now — try again at a different time of day if you need data.")
+                return@doLast
+            }
+
+            // Population stats across ALL informed_entity selectors in the feed.
+            // Answers: what scope levels does SL actually use? Trip-level filtering
+            // requires informed_entity.trip.trip_id — that's the load-bearing
+            // question for the "deviations for this specific bus" feature.
+            var totalSelectors = 0
+            var withAgencyId = 0
+            var withRouteId = 0
+            var withRouteType = 0
+            var withDirectionId = 0
+            var withTrip = 0
+            var withTripIdInTrip = 0
+            var withRouteIdInTrip = 0
+            var withStopId = 0
+
+            alertEntities.forEach { e ->
+                e.alert.informedEntityList.forEach { sel ->
+                    totalSelectors++
+                    if (sel.hasAgencyId()) withAgencyId++
+                    if (sel.hasRouteId()) withRouteId++
+                    if (sel.hasRouteType()) withRouteType++
+                    if (sel.hasDirectionId()) withDirectionId++
+                    if (sel.hasStopId()) withStopId++
+                    if (sel.hasTrip()) {
+                        withTrip++
+                        if (sel.trip.hasTripId()) withTripIdInTrip++
+                        if (sel.trip.hasRouteId()) withRouteIdInTrip++
+                    }
+                }
+            }
+
+            logger.lifecycle("--- informed_entity selector population (out of $totalSelectors selectors across ${alertEntities.size} alerts) ---")
+            logger.lifecycle("agency_id:                  $withAgencyId")
+            logger.lifecycle("route_id:                   $withRouteId")
+            logger.lifecycle("route_type:                 $withRouteType")
+            logger.lifecycle("direction_id:               $withDirectionId")
+            logger.lifecycle("stop_id:                    $withStopId")
+            logger.lifecycle("trip (any):                 $withTrip")
+            logger.lifecycle("  trip.trip_id present:     $withTripIdInTrip")
+            logger.lifecycle("  trip.route_id present:    $withRouteIdInTrip")
+
+            // Sample up to 3 alerts with their selector breakdown so we can
+            // eyeball the actual structure — number-only stats can hide that
+            // e.g. SL fills route_id 100% but never trip_id, vs filling both.
+            logger.lifecycle("--- sample alerts (up to 3) ---")
+            alertEntities.take(3).forEachIndexed { i, e ->
+                val a = e.alert
+                val header = if (a.hasHeaderText() && a.headerText.translationCount > 0) {
+                    a.headerText.getTranslation(0).text
+                } else {
+                    "(no header)"
+                }
+                val cause = if (a.hasCause()) a.cause.toString() else "(no cause)"
+                val effect = if (a.hasEffect()) a.effect.toString() else "(no effect)"
+                logger.lifecycle("  [$i] id=${e.id} cause=$cause effect=$effect")
+                logger.lifecycle("      header: ${header.take(120)}")
+                a.informedEntityList.take(5).forEachIndexed { j, sel ->
+                    val parts = mutableListOf<String>()
+                    if (sel.hasAgencyId()) parts += "agency=${sel.agencyId}"
+                    if (sel.hasRouteId()) parts += "route_id=${sel.routeId}"
+                    if (sel.hasRouteType()) parts += "route_type=${sel.routeType}"
+                    if (sel.hasDirectionId()) parts += "direction_id=${sel.directionId}"
+                    if (sel.hasStopId()) parts += "stop_id=${sel.stopId}"
+                    if (sel.hasTrip()) {
+                        val tripParts = mutableListOf<String>()
+                        if (sel.trip.hasTripId()) tripParts += "trip_id=${sel.trip.tripId}"
+                        if (sel.trip.hasRouteId()) tripParts += "route_id=${sel.trip.routeId}"
+                        if (sel.trip.hasDirectionId()) tripParts += "direction_id=${sel.trip.directionId}"
+                        if (sel.trip.hasStartDate()) tripParts += "start_date=${sel.trip.startDate}"
+                        if (sel.trip.hasStartTime()) tripParts += "start_time=${sel.trip.startTime}"
+                        parts += "trip{${tripParts.joinToString(",")}}"
+                    }
+                    logger.lifecycle("      selector[$j]: ${parts.joinToString(", ")}")
+                }
+                if (a.informedEntityCount > 5) {
+                    logger.lifecycle("      ... + ${a.informedEntityCount - 5} more selectors")
+                }
+            }
+
+            // Bottom-line answer for the project's question.
+            logger.lifecycle("--- VERDICT ---")
+            when {
+                withTripIdInTrip > 0 ->
+                    logger.lifecycle("YES: SL populates trip_id in informed_entity ($withTripIdInTrip / $totalSelectors selectors). Trip-level alerts are reachable.")
+                withTrip > 0 ->
+                    logger.lifecycle("PARTIAL: SL uses TripDescriptor in some selectors but never fills trip_id. Trip-level matching not possible; selector likely has only route_id.")
+                else ->
+                    logger.lifecycle("NO: SL does not use TripDescriptor at all. Granularity is limited to route_id/stop_id/route_type — same as SL Deviations API. Trip-specific alerts are not feasible.")
+            }
+        } finally {
+            connection.disconnect()
+        }
+    }
+}

@@ -42,6 +42,7 @@ import com.example.thesisproject.model.isInWindow
 import com.example.thesisproject.service.CommuteTrackingService
 import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.GtfsRealtimeRepository
+import com.example.thesisproject.repository.ServiceAlertsRepository
 import com.example.thesisproject.repository.SlDeviationsRepository
 import com.example.thesisproject.repository.SlLineRepository
 import com.example.thesisproject.repository.StopRepository
@@ -101,6 +102,7 @@ class MainActivity : AppCompatActivity() {
     // stop in onPause. State observed by the verification overlay.
     private val realtimeRepository by lazy { GtfsRealtimeRepository() }
     private val deviationsRepository by lazy { SlDeviationsRepository() }
+    private val serviceAlertsRepository by lazy { ServiceAlertsRepository() }
     // Step 8a: SL Departures repository, also feeds the widget state deriver.
     // Reused from Step 3's stop-config flow (different MapViewModel instance,
     // but the underlying Retrofit client is per-repository — harmless).
@@ -111,6 +113,7 @@ class MainActivity : AppCompatActivity() {
             lineRepository = lineRepository,
             realtimeRepository = realtimeRepository,
             deviationsRepository = deviationsRepository,
+            serviceAlertsRepository = serviceAlertsRepository,
             stopRepository = stopRepository,
             apiKey = BuildConfig.GTFS_REALTIME_KEY
         )
@@ -335,40 +338,65 @@ class MainActivity : AppCompatActivity() {
      * concatenates all deviations' header+details text.
      */
     private fun renderDeviations(state: TrackingState) {
-        val deviations = (state as? TrackingState.Polling)?.deviations.orEmpty()
-        if (deviations.isEmpty()) {
+        val polling = state as? TrackingState.Polling
+        val deviations = polling?.deviations.orEmpty()
+        val tripAlerts = polling?.tripAlerts.orEmpty()
+        if (deviations.isEmpty() && tripAlerts.isEmpty()) {
             deviationCard.visibility = View.GONE
             deviationDetailsExpanded = false
             lastDeviationSetKey = ""
             applyDeviationExpansion()
             return
         }
-        // Highest-importance first (per docs, importance_level is the only
-        // priority field meant for sorting). Nulls last.
-        val sorted = deviations.sortedByDescending { it.importanceLevel ?: Int.MIN_VALUE }
+        // Trip-level alerts (from GTFS-RT ServiceAlerts.pb, filtered to
+        // tracked trip_ids) come first — they're "this affects YOUR specific
+        // bus" and trump the line-level deviations from the SL Deviations
+        // API. Each gets a ★ prefix in the expanded list so the user can
+        // tell which entries are trip-specific.
+        val sortedDeviations = deviations.sortedByDescending { it.importanceLevel ?: Int.MIN_VALUE }
+        val totalCount = tripAlerts.size + sortedDeviations.size
+        val primaryHeader = if (tripAlerts.isNotEmpty()) {
+            "★ ${tripAlerts.first().header}"
+        } else {
+            sortedDeviations.first().preferredVariant("sv")?.header.orEmpty()
+        }
         // BUG-029: cards always start collapsed regardless of count — the
         // expanded view can be very long and would push the rest of the UI
-        // off-screen. The +N badge + chevron signal the card is expandable.
-        // BUG-027's per-set tracking is kept so a manual collapse persists
-        // across re-polls of the same set; only a NEW deviation set resets
-        // the expansion state to collapsed.
-        val setKey = sorted.joinToString("|") { "${it.deviationCaseId}:${it.version}" }
+        // off-screen. Set key now includes trip-alert ids so the expansion
+        // state resets when a new trip alert appears (or any other change).
+        val setKey = buildString {
+            tripAlerts.forEach { append("T:${it.id}|") }
+            sortedDeviations.forEach { append("D:${it.deviationCaseId}:${it.version}|") }
+        }
         if (setKey != lastDeviationSetKey) {
             deviationDetailsExpanded = false
             lastDeviationSetKey = setKey
         }
-        val primary = sorted.first().preferredVariant("sv")
-        deviationHeader.text = primary?.header.orEmpty()
+        deviationHeader.text = primaryHeader
         deviationCard.visibility = View.VISIBLE
-        if (sorted.size > 1) {
+        if (totalCount > 1) {
             deviationCount.visibility = View.VISIBLE
-            deviationCount.text = "+${sorted.size - 1}"
+            deviationCount.text = "+${totalCount - 1}"
         } else {
             deviationCount.visibility = View.GONE
         }
-        deviationDetails.text = sorted.joinToString(separator = "\n\n") { dev ->
-            val v = dev.preferredVariant("sv")
-            buildString {
+        // Build the expanded details text: trip-matched alerts first
+        // (★-prefixed), then line-level deviations. Both sources may be
+        // empty independently, but at least one is non-empty here.
+        deviationDetails.text = buildString {
+            tripAlerts.forEachIndexed { i, alert ->
+                if (i > 0) append("\n\n")
+                append("★ ")
+                append(alert.header)
+                if (alert.description.isNotBlank()) {
+                    append("\n")
+                    append(alert.description)
+                }
+            }
+            if (tripAlerts.isNotEmpty() && sortedDeviations.isNotEmpty()) append("\n\n")
+            sortedDeviations.forEachIndexed { i, dev ->
+                if (i > 0) append("\n\n")
+                val v = dev.preferredVariant("sv")
                 append(v?.header.orEmpty())
                 val details = v?.details.orEmpty()
                 if (details.isNotBlank()) {

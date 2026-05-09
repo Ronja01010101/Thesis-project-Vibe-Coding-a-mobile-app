@@ -9,4 +9,30 @@
     <color name="sl_blue">#1976D2</color>
     <color name="sl_blue_dark">#0D47A1</color>
     <color name="sl_blue_light">#64B5F6</color>
+
+    <!-- BUG-020: widget colors (light-mode variant). Dark-mode variants
+         live in values-night/colors.xml under the same keys; Android's
+         resource resolver picks the right one based on the system's
+         current uiMode. Phase / accent colors that work on both modes
+         are defined once here and inherited by night. -->
+    <color name="widget_background">#FFFFFFFF</color>
+    <color name="widget_text_primary">#FF212121</color>
+    <color name="widget_text_secondary">#FF424242</color>
+    <color name="widget_text_muted">#FF616161</color>
+    <color name="widget_text_caption">#FF757575</color>
+    <color name="widget_route_line">#FF9E9E9E</color>
+    <color name="widget_marker_outline">#FF212121</color>
+    <color name="widget_stops_away">#FFF57C00</color>
+
+    <!-- Mode-agnostic widget colors (same on light and dark). -->
+    <color name="widget_user_stop">#FF1976D2</color>
+    <color name="widget_phase_ontime">#FF43A047</color>
+    <color name="widget_phase_late">#FFE53935</color>
+    <color name="widget_phase_early">#FF8E24AA</color>
+    <color name="widget_phase_neutral">#FF9E9E9E</color>
+    <color name="widget_extra_bus">#FF607D8B</color>
+    <color name="widget_line_badge_bg">#FF1976D2</color>
+    <color name="widget_line_badge_text">#FFFFFFFF</color>
+    <color name="widget_deviation_bg">#FFFFB300</color>
+    <color name="widget_deviation_text">#FF000000</color>
 </resources>

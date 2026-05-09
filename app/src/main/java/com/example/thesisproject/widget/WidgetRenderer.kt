@@ -101,10 +101,13 @@ object WidgetRenderer {
         // --- 5. Hero block (caption + ETA stacked). ---
         // The "Estimated arrival" caption is a static layout string; we only
         // need to fill the ETA text + show/hide the caption depending on phase.
+        // Hero ETA text. Phase.LeaveNow used to render "leave now!" but the
+        // user found that wording disliked; the Late-color bus marker still
+        // signals urgency visually for ETA <= 3 min, and the minute count
+        // is the trustworthy answer to "when does my bus arrive".
         val heroText = when (state.phase) {
             Phase.Dormant -> context.getString(R.string.widget_placeholder)
             Phase.Passed -> "passed"
-            Phase.LeaveNow -> "leave now!"
             else -> state.etaMinutes?.let { "$it min" } ?: context.getString(R.string.widget_placeholder)
         }
         views.setTextViewText(R.id.widget_eta, heroText)

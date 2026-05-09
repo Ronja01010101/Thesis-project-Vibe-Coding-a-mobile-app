@@ -84,14 +84,21 @@ class CommuteAppWidgetProvider : AppWidgetProvider() {
             val boundIdentity = bindings.getIdentity(widgetId)
             val boundConfig = boundIdentity?.let { configsByIdentity[it] }
 
+            // Track whether the widget is in the active-tracking state, to
+            // decide whether the open-app intent should also focus the map
+            // on the tracked vehicle (vs just opening to the default view).
+            val isActiveTracked =
+                boundIdentity != null && boundConfig != null &&
+                    snapshot.activeIdentity == boundIdentity && snapshot.state != null
+
             when {
                 // Widget is unbound (e.g. user pre-Step-8b add) — show full Dormant.
                 boundIdentity == null || boundConfig == null ->
                     WidgetRenderer.renderDormant(context, views, null, null)
 
                 // Widget bound to the currently-tracked commute and we have live state.
-                snapshot.activeIdentity == boundIdentity && snapshot.state != null ->
-                    WidgetRenderer.render(context, views, snapshot.state)
+                isActiveTracked ->
+                    WidgetRenderer.render(context, views, snapshot.state!!)
 
                 // Widget bound to a commute that isn't currently active — show
                 // Dormant with the bound commute's identity baked into the
@@ -106,10 +113,14 @@ class CommuteAppWidgetProvider : AppWidgetProvider() {
             }
 
             // Tap-to-open: any tap on the widget root opens MainActivity.
-            // Covers half of P1-FR11; Step 9 in the build order can be marked
-            // covered-by-Step-8b once this lands runtime-confirmed.
+            // When the widget is actively tracking a vehicle, also pass
+            // EXTRA_FOCUS_TRACKED_VEHICLE so the app zooms in on the bus
+            // instead of running its default route auto-fit.
             val openIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+                if (isActiveTracked) {
+                    putExtra(MainActivity.EXTRA_FOCUS_TRACKED_VEHICLE, true)
+                }
             }
             val pi = PendingIntent.getActivity(
                 context,

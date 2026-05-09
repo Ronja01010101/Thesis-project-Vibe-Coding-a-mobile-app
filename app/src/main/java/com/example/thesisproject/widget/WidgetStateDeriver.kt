@@ -25,13 +25,17 @@ object WidgetStateDeriver {
 
     /**
      * Maximum stops shown on the route gauge ending at the user's stop.
-     * Originally 5 (BUG-014), bumped to 7 in BUG-028 to give multi-vehicle
-     * markers more room — runtime testing on 2026-05-09 showed 7 was
-     * actually too crowded and the live bus position read less clearly.
-     * Reverted to 5; additional-vehicle markers (BUG-028) still draw, just
-     * within the tighter window.
+     * Iteration history: BUG-014 (=5) → BUG-028 (=7, too crowded) → revert
+     * to 5 → runtime testing 2026-05-09 showed a bus 5 stops away wasn't
+     * visible on the gauge until it had advanced to the 4-stops-away
+     * position (the leftmost gauge dot at WINDOW_SIZE=5). Bumped to 6 so
+     * the leftmost dot represents "5 stops behind user", which means a
+     * 5-stops-away bus enters the gauge at position 0 instead of being
+     * hidden until it reaches 4 stops away. The user's stop stays the
+     * rightmost dot. Additional-vehicle markers (BUG-028) inherit the
+     * wider window automatically.
      */
-    private const val WINDOW_SIZE = 5
+    private const val WINDOW_SIZE = 6
 
     private val CLOCK_FORMATTER = DateTimeFormatter.ofPattern("HH:mm")
 

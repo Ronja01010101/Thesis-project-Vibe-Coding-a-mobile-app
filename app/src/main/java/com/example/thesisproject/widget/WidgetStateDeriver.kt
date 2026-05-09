@@ -151,26 +151,22 @@ object WidgetStateDeriver {
                 (dep.estimatedTime ?: dep.scheduledTime).format(CLOCK_FORMATTER)
             }
 
-        // Priority for the widget pill: trip-level alerts (from GTFS-RT
-        // ServiceAlerts.pb, filtered to tracked trip_ids) trump line-level
-        // deviations. Trip-matched alerts are "this affects YOUR specific
-        // bus" and more relevant than a line-wide notice. Header gets a ★
-        // prefix on the widget pill so the user has a visual cue that the
-        // alert is bus-specific. Total count combines both sources.
-        val totalAlertCount = state.deviations.size + state.tripAlerts.size
-        val deviationSummary = when {
-            state.tripAlerts.isNotEmpty() -> WidgetDeviationSummary(
-                header = "★ ${state.tripAlerts.first().header}",
-                totalCount = totalAlertCount
+        // Widget pill shows ONLY trip-level alerts (from GTFS-RT
+        // ServiceAlerts.pb, filtered to tracked trip_ids). Line-level
+        // deviations (from SL Deviations API) are intentionally omitted
+        // here — they're noise on the widget surface, where the user
+        // wants only "is something wrong with MY specific bus?". The
+        // full picture (line + trip) stays visible in the app's
+        // deviation card. ★ prefix marks the alert as trip-specific.
+        // hasDeviation in computePhase will be false when there are
+        // only line-level alerts, so the bus marker stays its normal
+        // OnTime/Late/Early colour rather than going Deviation-red for
+        // a disruption that doesn't touch this bus.
+        val deviationSummary = state.tripAlerts.firstOrNull()?.let { alert ->
+            WidgetDeviationSummary(
+                header = "★ ${alert.header}",
+                totalCount = state.tripAlerts.size
             )
-            state.deviations.isNotEmpty() -> {
-                val top = state.deviations.maxByOrNull { it.importanceLevel ?: Int.MIN_VALUE }
-                WidgetDeviationSummary(
-                    header = top?.preferredVariant("sv")?.header.orEmpty(),
-                    totalCount = totalAlertCount
-                )
-            }
-            else -> null
         }
 
         val isCancelled = nextDep?.status == DepartureStatus.CANCELLED

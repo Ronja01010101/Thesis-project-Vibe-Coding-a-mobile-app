@@ -40,5 +40,14 @@ data class SlStop(
     val id: String = "",
     val name: String = "",
     val lat: Double = 0.0,
-    val lon: Double = 0.0
+    val lon: Double = 0.0,
+    /**
+     * BUG-025: per-stop destination-sign override from GTFS `stop_headsign`
+     * (in `stop_times.txt`). Set only when it differs from the direction's
+     * `trip_headsign`. Used by the commute-config picker so the displayed
+     * direction matches what SL prints on the bus's destination sign at
+     * THIS stop (e.g. line 57 at Nätgränd shows "Sofia", not the GTFS
+     * terminus "Tengdahlsgatan"). Null = use the direction-level headsign.
+     */
+    val stopHeadsign: String? = null
 )

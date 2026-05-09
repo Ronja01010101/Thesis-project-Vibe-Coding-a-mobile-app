@@ -94,6 +94,31 @@ object WidgetBitmapRenderer {
             }
         }
 
+        // BUG-028: additional vehicle markers (non-locked vehicles within
+        // the visible window) drawn FIRST so the locked marker, when it
+        // overlaps, sits visually on top. Smaller (6dp radius), muted
+        // blue-grey, no line text inside — they're context, not the focus.
+        // Drawn even in Phase.Passed because that's exactly when the user
+        // wants to see "where's the next bus" (their original locked one
+        // has gone past).
+        if (state.additionalBusIndices.isNotEmpty()) {
+            val extraOutline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = Color.WHITE
+                style = Paint.Style.FILL
+            }
+            val extraFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = COLOR_EXTRA_BUS
+                style = Paint.Style.FILL
+            }
+            val extraRadius = density * 6f
+            for (rawIdx in state.additionalBusIndices) {
+                val clamped = max(0f, min((state.visibleStopCount - 1).toFloat(), rawIdx))
+                val x = padX + span * clamped / divisor
+                canvas.drawCircle(x, midY, extraRadius + density * 1f, extraOutline)
+                canvas.drawCircle(x, midY, extraRadius, extraFill)
+            }
+        }
+
         // Bus marker — only when in window AND not Passed.
         val visibleBus = state.visibleBusIndex
         if (visibleBus != null && state.phase != Phase.Passed) {
@@ -206,4 +231,8 @@ object WidgetBitmapRenderer {
     private const val COLOR_LATE = 0xFFE53935.toInt()
     private const val COLOR_EARLY = 0xFF8E24AA.toInt()
     private const val COLOR_NEUTRAL = 0xFF9E9E9E.toInt()
+    // BUG-028: additional (non-locked) bus markers — Material blue-grey 600,
+    // visually distinct from both the route line (#BDBDBD light grey) and
+    // the locked-bus phase colours.
+    private const val COLOR_EXTRA_BUS = 0xFF607D8B.toInt()
 }

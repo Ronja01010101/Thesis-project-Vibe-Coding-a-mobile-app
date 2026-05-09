@@ -74,12 +74,33 @@ class StopRepository {
         lineId: String,
         directionCode: Int?,
         after: LocalDateTime
-    ): Departure? {
-        val lineIdInt = lineId.toIntOrNull() ?: return null
+    ): Departure? = getUpcomingDepartures(stopId, lineId, directionCode, after, count = 1)
+        .firstOrNull()
+
+    /**
+     * Step 8a + BUG-028: fetches the next [count] predicted departures at
+     * [stopId] for the given (lineId, directionCode), all at-or-after
+     * [after], sorted by scheduledTime. The first element is the same as
+     * [getNextDeparture]; subsequent elements feed the widget's "Next:"
+     * line for high-frequency lines (metro 17, busy bus lines).
+     *
+     * Same anti-BUG-009 caveat as getNextDeparture: SL Transport's
+     * `journey.id` is NOT GTFS-RT's `trip_id`. Departures here cannot be
+     * paired one-to-one with vehicles in the GTFS-RT feed.
+     */
+    suspend fun getUpcomingDepartures(
+        stopId: String,
+        lineId: String,
+        directionCode: Int?,
+        after: LocalDateTime,
+        count: Int
+    ): List<Departure> {
+        if (count <= 0) return emptyList()
+        val lineIdInt = lineId.toIntOrNull() ?: return emptyList()
         val response = try {
             api.getDepartures(stopId)
         } catch (e: Exception) {
-            return null
+            return emptyList()
         }
         return response.departures
             .asSequence()
@@ -100,7 +121,8 @@ class StopRepository {
                 )
             }
             .sortedBy { it.scheduledTime }
-            .firstOrNull()
+            .take(count)
+            .toList()
     }
 
     private fun parseSlDateTime(raw: String?): LocalDateTime? {

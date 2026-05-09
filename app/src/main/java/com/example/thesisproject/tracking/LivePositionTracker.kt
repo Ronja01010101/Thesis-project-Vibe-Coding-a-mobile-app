@@ -64,10 +64,11 @@ class LivePositionTracker(
     private var cachedDeviationEtag: String? = null
     private var cachedDeviationKey: Pair<String, String>? = null
 
-    // Step 8a: cached next-departure for the widget's ETA + delta. Refreshed
-    // every 3rd vehicle tick (= 60s, same cadence as deviations). Invalidated
-    // when the active commute's line/stop/direction key changes.
-    private var cachedNextDeparture: Departure? = null
+    // Step 8a + BUG-028: cached upcoming-departures (next 3) for the widget's
+    // ETA/delta plus the "Next:" line. Refreshed every 3rd vehicle tick
+    // (= 60s, same cadence as deviations). Invalidated when the active
+    // commute's line/stop/direction key changes.
+    private var cachedUpcomingDepartures: List<Departure> = emptyList()
     private var cachedDepartureKey: Triple<String, String, Int?>? = null
 
     fun start(scope: CoroutineScope) {
@@ -86,7 +87,7 @@ class LivePositionTracker(
         cachedDeviations = emptyList()
         cachedDeviationEtag = null
         cachedDeviationKey = null
-        cachedNextDeparture = null
+        cachedUpcomingDepartures = emptyList()
         cachedDepartureKey = null
         tickCount = 0L
         _state.value = TrackingState.Idle
@@ -101,7 +102,7 @@ class LivePositionTracker(
             cachedDeviations = emptyList()
             cachedDeviationEtag = null
             cachedDeviationKey = null
-            cachedNextDeparture = null
+            cachedUpcomingDepartures = emptyList()
             cachedDepartureKey = null
             _state.value = TrackingState.NoActiveCommute(configs.size)
             return
@@ -165,11 +166,11 @@ class LivePositionTracker(
         val departureKeyChanged = departureKey != cachedDepartureKey
         if (departureKeyChanged) {
             cachedDepartureKey = departureKey
-            cachedNextDeparture = null
+            cachedUpcomingDepartures = emptyList()
         }
         val shouldFetchDeparture = departureKeyChanged || tickCount % DEPARTURE_POLL_RATIO == 0L
         if (shouldFetchDeparture) {
-            fetchNextDeparture(active)
+            fetchUpcomingDepartures(active)
         }
         tickCount++
 
@@ -178,28 +179,31 @@ class LivePositionTracker(
             vehicles = vehicles,
             lastUpdateMs = System.currentTimeMillis(),
             deviations = cachedDeviations,
-            nextDeparture = cachedNextDeparture,
-            matchedDirection = direction
+            nextDeparture = cachedUpcomingDepartures.firstOrNull(),
+            matchedDirection = direction,
+            upcomingDepartures = cachedUpcomingDepartures
         )
     }
 
-    private suspend fun fetchNextDeparture(active: CommuteConfig) {
+    private suspend fun fetchUpcomingDepartures(active: CommuteConfig) {
         try {
-            cachedNextDeparture = stopRepository.getNextDeparture(
+            cachedUpcomingDepartures = stopRepository.getUpcomingDepartures(
                 stopId = active.stopId,
                 lineId = active.lineId,
                 directionCode = active.directionCode,
-                after = localDateTimeClock()
+                after = localDateTimeClock(),
+                count = UPCOMING_DEPARTURE_COUNT
             )
-            val dep = cachedNextDeparture
-            if (dep == null) {
-                Log.d(TAG, "next departure: (none) line=${active.lineId} stop=${active.stopId} dir=${active.directionCode}")
+            val list = cachedUpcomingDepartures
+            if (list.isEmpty()) {
+                Log.d(TAG, "upcoming departures: (none) line=${active.lineId} stop=${active.stopId} dir=${active.directionCode}")
             } else {
-                val predicted = dep.estimatedTime?.let { " predicted=$it" }.orEmpty()
-                Log.d(TAG, "next departure: scheduled=${dep.scheduledTime}$predicted status=${dep.status}")
+                val head = list.first()
+                val headPredicted = head.estimatedTime?.let { " predicted=$it" }.orEmpty()
+                Log.d(TAG, "upcoming departures: ${list.size} fetched, head scheduled=${head.scheduledTime}$headPredicted status=${head.status}")
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Departure fetch failed (keeping cache)", e)
+            Log.w(TAG, "Upcoming-departures fetch failed (keeping cache)", e)
         }
     }
 
@@ -277,5 +281,8 @@ class LivePositionTracker(
         // doesn't update faster than the vehicle GPS does — same 60s cadence
         // as deviations is plenty fresh for a "next bus in N minutes" widget.
         private const val DEPARTURE_POLL_RATIO = 3L
+        // BUG-028: how many upcoming departures to fetch. 3 = the hero
+        // (currently arriving) + 2 in the "Next:" line. More would clutter.
+        private const val UPCOMING_DEPARTURE_COUNT = 3
     }
 }

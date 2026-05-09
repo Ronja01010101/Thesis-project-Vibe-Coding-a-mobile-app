@@ -214,6 +214,23 @@
         </LinearLayout>
     </LinearLayout>
 
+    <!-- 5d. Next-departures line (BUG-028): "Next: 18:42 · 18:47" — upcoming
+         scheduled times after the hero. GONE when there's none (low-frequency
+         lines or end of day) or in Dormant / Passed phases. Helps high-
+         frequency-line users decide what to do if they miss the current bus. -->
+    <TextView
+        android:id="@+id/widget_next_departures"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        android:layout_marginTop="2dp"
+        android:textSize="11sp"
+        android:textColor="#BDBDBD"
+        android:singleLine="true"
+        android:ellipsize="end"
+        android:text=""
+        tools:ignore="HardcodedText" />
+
     <!-- 6. GPS-age caption (Chronometer auto-ticks every second inside the
          launcher's process — the displayed age progresses smoothly between
          widget pushes instead of sitting frozen for 20s. format gets %s

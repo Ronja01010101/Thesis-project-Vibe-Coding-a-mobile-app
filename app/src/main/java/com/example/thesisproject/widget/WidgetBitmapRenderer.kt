@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Typeface
+import androidx.core.content.ContextCompat
+import com.example.thesisproject.R
 import kotlin.math.absoluteValue
 import kotlin.math.max
 import kotlin.math.min
@@ -52,9 +54,17 @@ object WidgetBitmapRenderer {
         val midY = heightPx / 2f
         val span = widthPx - 2 * padX
 
+        // BUG-020: theme-aware colors. Resource resolver picks values/colors.xml
+        // for light mode and values-night/colors.xml for dark mode based on the
+        // system's current uiMode.
+        val routeLineColor = ContextCompat.getColor(context, R.color.widget_route_line)
+        val userStopColor = ContextCompat.getColor(context, R.color.widget_user_stop)
+        val markerOutlineColor = ContextCompat.getColor(context, R.color.widget_marker_outline)
+        val extraBusColor = ContextCompat.getColor(context, R.color.widget_extra_bus)
+
         // Baseline route line.
         val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = COLOR_ROUTE_LINE
+            color = routeLineColor
             strokeWidth = density * 1.5f
         }
         canvas.drawLine(padX, midY, widthPx - padX, midY, linePaint)
@@ -62,16 +72,16 @@ object WidgetBitmapRenderer {
         // Stop dots — small filled circles, larger ringed dot at rightmost
         // (the user's stop is always at index visibleStopCount - 1).
         val stopPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = COLOR_ROUTE_LINE
+            color = routeLineColor
             style = Paint.Style.FILL
         }
         val userOuterPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = COLOR_USER_STOP
+            color = userStopColor
             style = Paint.Style.STROKE
             strokeWidth = density * 2f
         }
         val userInnerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = COLOR_USER_STOP
+            color = userStopColor
             style = Paint.Style.FILL
         }
         val stopRadius = density * 3f
@@ -103,11 +113,11 @@ object WidgetBitmapRenderer {
         // has gone past).
         if (state.additionalBusIndices.isNotEmpty()) {
             val extraOutline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE
+                color = markerOutlineColor
                 style = Paint.Style.FILL
             }
             val extraFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = COLOR_EXTRA_BUS
+                color = extraBusColor
                 style = Paint.Style.FILL
             }
             val extraRadius = density * 6f
@@ -124,11 +134,11 @@ object WidgetBitmapRenderer {
         if (visibleBus != null && state.phase != Phase.Passed) {
             val clamped = max(0f, min((state.visibleStopCount - 1).toFloat(), visibleBus))
             val busX = padX + span * clamped / divisor
-            val busFill = busColorFor(state.phase)
+            val busFill = busColorFor(context, state.phase)
             val busRadius = density * 11f
 
             val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE
+                color = markerOutlineColor
                 style = Paint.Style.FILL
             }
             canvas.drawCircle(busX, midY, busRadius + density * 1.5f, outline)
@@ -138,6 +148,9 @@ object WidgetBitmapRenderer {
             }
             canvas.drawCircle(busX, midY, busRadius, fill)
 
+            // Line designation text inside the bus marker. The phase fill
+            // colors are dark enough that white text reads well on either
+            // light or dark widget background.
             val text = state.lineDesignation.takeIf { it.isNotBlank() } ?: "?"
             val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = Color.WHITE
@@ -175,14 +188,17 @@ object WidgetBitmapRenderer {
         val midY = heightPx / 2f
         val span = widthPx - 2 * padX
 
+        val routeLineColor = ContextCompat.getColor(context, R.color.widget_route_line)
+        val markerOutlineColor = ContextCompat.getColor(context, R.color.widget_marker_outline)
+
         val axisPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = COLOR_ROUTE_LINE
+            color = routeLineColor
             strokeWidth = density * 1.2f
         }
         canvas.drawLine(padX, midY, widthPx - padX, midY, axisPaint)
 
         val tickPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = COLOR_ROUTE_LINE
+            color = routeLineColor
             strokeWidth = density * 1.5f
         }
         val centerX = padX + span / 2
@@ -196,9 +212,9 @@ object WidgetBitmapRenderer {
             val ratio = (clamped + MAX_DELTA_MIN) / (2f * MAX_DELTA_MIN)
             val dotX = padX + span * ratio
             val dotColor = when {
-                delta.absoluteValue < 1 -> COLOR_ON_TIME
-                delta > 0 -> COLOR_LATE
-                else -> COLOR_EARLY
+                delta.absoluteValue < 1 -> ContextCompat.getColor(context, R.color.widget_phase_ontime)
+                delta > 0 -> ContextCompat.getColor(context, R.color.widget_phase_late)
+                else -> ContextCompat.getColor(context, R.color.widget_phase_early)
             }
             val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
                 color = dotColor
@@ -206,7 +222,7 @@ object WidgetBitmapRenderer {
             }
             canvas.drawCircle(dotX, midY, density * 4.5f, dotPaint)
             val dotOutline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                color = Color.WHITE
+                color = markerOutlineColor
                 style = Paint.Style.STROKE
                 strokeWidth = density * 1.5f
             }
@@ -216,23 +232,15 @@ object WidgetBitmapRenderer {
         return bitmap
     }
 
-    private fun busColorFor(phase: Phase): Int = when (phase) {
-        Phase.Late, Phase.LeaveNow, Phase.Deviation -> COLOR_LATE
-        Phase.Early -> COLOR_EARLY
-        Phase.OnTime -> COLOR_ON_TIME
-        Phase.Passed, Phase.Dormant -> COLOR_NEUTRAL
+    private fun busColorFor(context: Context, phase: Phase): Int {
+        val resId = when (phase) {
+            Phase.Late, Phase.LeaveNow, Phase.Deviation -> R.color.widget_phase_late
+            Phase.Early -> R.color.widget_phase_early
+            Phase.OnTime -> R.color.widget_phase_ontime
+            Phase.Passed, Phase.Dormant -> R.color.widget_phase_neutral
+        }
+        return ContextCompat.getColor(context, resId)
     }
 
     private const val MAX_DELTA_MIN = 5
-
-    private const val COLOR_ROUTE_LINE = 0xFFBDBDBD.toInt()
-    private const val COLOR_USER_STOP = 0xFF1976D2.toInt()
-    private const val COLOR_ON_TIME = 0xFF43A047.toInt()
-    private const val COLOR_LATE = 0xFFE53935.toInt()
-    private const val COLOR_EARLY = 0xFF8E24AA.toInt()
-    private const val COLOR_NEUTRAL = 0xFF9E9E9E.toInt()
-    // BUG-028: additional (non-locked) bus markers — Material blue-grey 600,
-    // visually distinct from both the route line (#BDBDBD light grey) and
-    // the locked-bus phase colours.
-    private const val COLOR_EXTRA_BUS = 0xFF607D8B.toInt()
 }

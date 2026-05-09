@@ -126,10 +126,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var deviationHeader: TextView
     private lateinit var deviationCount: TextView
     private lateinit var deviationDetails: TextView
+    // BUG-029: chevron affordance + scrollable details container so long
+    // lists of deviations don't push the rest of the UI off-screen.
+    private lateinit var deviationChevron: TextView
+    private lateinit var deviationDetailsScroll: View
     private var deviationDetailsExpanded: Boolean = false
-    // BUG-027: tracks the last-rendered deviation set so the expansion state
-    // resets on set changes (auto-expand when count > 1) but not on every
-    // 20s repoll, preserving the user's manual collapse choice.
+    // BUG-027/029: tracks the last-rendered deviation set so the user's
+    // collapse choice persists across re-polls of the same set. BUG-029
+    // reverted BUG-027's auto-expand-on-multi behaviour — cards always
+    // start collapsed regardless of count.
     private var lastDeviationSetKey: String = ""
 
     // Step 8a: runtime grant for POST_NOTIFICATIONS (Android 13+). Without it,
@@ -251,9 +256,11 @@ class MainActivity : AppCompatActivity() {
         deviationHeader = findViewById(R.id.deviation_header)
         deviationCount = findViewById(R.id.deviation_count)
         deviationDetails = findViewById(R.id.deviation_details)
+        deviationChevron = findViewById(R.id.deviation_chevron)
+        deviationDetailsScroll = findViewById(R.id.deviation_details_scroll)
         deviationCard.setOnClickListener {
             deviationDetailsExpanded = !deviationDetailsExpanded
-            deviationDetails.visibility = if (deviationDetailsExpanded) View.VISIBLE else View.GONE
+            applyDeviationExpansion()
         }
 
         lifecycleScope.launch {
@@ -333,21 +340,21 @@ class MainActivity : AppCompatActivity() {
             deviationCard.visibility = View.GONE
             deviationDetailsExpanded = false
             lastDeviationSetKey = ""
-            deviationDetails.visibility = View.GONE
+            applyDeviationExpansion()
             return
         }
         // Highest-importance first (per docs, importance_level is the only
         // priority field meant for sorting). Nulls last.
         val sorted = deviations.sortedByDescending { it.importanceLevel ?: Int.MIN_VALUE }
-        // BUG-027: auto-expand the details panel whenever the set of active
-        // deviations changes AND contains more than one — user wanted all
-        // visible without an extra tap. Single-deviation cards stay
-        // collapsed (header alone is informative). Keyed by
-        // (deviationCaseId, version) so re-polls with the same set don't
-        // override a manual collapse.
+        // BUG-029: cards always start collapsed regardless of count — the
+        // expanded view can be very long and would push the rest of the UI
+        // off-screen. The +N badge + chevron signal the card is expandable.
+        // BUG-027's per-set tracking is kept so a manual collapse persists
+        // across re-polls of the same set; only a NEW deviation set resets
+        // the expansion state to collapsed.
         val setKey = sorted.joinToString("|") { "${it.deviationCaseId}:${it.version}" }
         if (setKey != lastDeviationSetKey) {
-            deviationDetailsExpanded = sorted.size > 1
+            deviationDetailsExpanded = false
             lastDeviationSetKey = setKey
         }
         val primary = sorted.first().preferredVariant("sv")
@@ -370,7 +377,18 @@ class MainActivity : AppCompatActivity() {
                 }
             }
         }
-        deviationDetails.visibility = if (deviationDetailsExpanded) View.VISIBLE else View.GONE
+        applyDeviationExpansion()
+    }
+
+    /**
+     * BUG-029: keep the chevron + scrollable-details container in sync
+     * with [deviationDetailsExpanded]. Chevron flips ▾ (collapsed) ↔ ▴
+     * (expanded) so the user has a clear affordance for "this is tappable".
+     */
+    private fun applyDeviationExpansion() {
+        deviationDetailsScroll.visibility =
+            if (deviationDetailsExpanded) View.VISIBLE else View.GONE
+        deviationChevron.text = if (deviationDetailsExpanded) "▴" else "▾"
     }
 
     /**

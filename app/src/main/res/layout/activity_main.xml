@@ -137,17 +137,41 @@
                         android:paddingBottom="2dp"
                         android:visibility="gone"
                         android:text="" />
+
+                    <!-- BUG-029: chevron affordance so the user knows the
+                         card is expandable. Flips between ▾ (collapsed)
+                         and ▴ (expanded) in MainActivity.renderDeviations. -->
+                    <TextView
+                        android:id="@+id/deviation_chevron"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textColor="@android:color/black"
+                        android:textSize="14sp"
+                        android:textStyle="bold"
+                        android:text="▾" />
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/deviation_details"
+                <!-- BUG-029: ScrollView with maxHeight so long lists of
+                     deviations don't push the rest of the UI off-screen.
+                     Hidden by default; expanded on card tap. -->
+                <ScrollView
+                    android:id="@+id/deviation_details_scroll"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:textColor="@android:color/black"
-                    android:textSize="13sp"
+                    android:maxHeight="200dp"
                     android:visibility="gone"
-                    android:text="" />
+                    android:fillViewport="false">
+
+                    <TextView
+                        android:id="@+id/deviation_details"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:textColor="@android:color/black"
+                        android:textSize="13sp"
+                        android:text="" />
+                </ScrollView>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
     </LinearLayout>

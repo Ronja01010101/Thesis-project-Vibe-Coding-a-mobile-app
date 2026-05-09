@@ -107,7 +107,16 @@ dependencies {
 // The user's device never downloads or parses GTFS itself.
 // =====================================================================
 
-data class StopExport(val id: String, val name: String, val lat: Double, val lon: Double)
+// BUG-025: stopHeadsign carries the GTFS `stop_headsign` per-stop override
+// (only set when it differs from the trip-level headsign — keeps the asset
+// compact since most stops inherit the direction headsign).
+data class StopExport(
+    val id: String,
+    val name: String,
+    val lat: Double,
+    val lon: Double,
+    val stopHeadsign: String? = null
+)
 
 data class DirectionExport(
     val directionId: Int,
@@ -304,21 +313,28 @@ tasks.register("extractGtfs") {
         }
         logger.lifecycle("Loaded ${shapesById.size} shape polylines")
 
-        // 5) stop_times.txt: stream the giant file, keep only rows for our representative trips
-        val rawStopSequences = mutableMapOf<String, MutableList<Pair<Int, String>>>()
+        // 5) stop_times.txt: stream the giant file, keep only rows for our representative trips.
+        //    BUG-025: also capture `stop_headsign` per (trip_id, stop_id) so the per-stop
+        //    destination sign (what SL prints on the bus at THIS stop) can override the
+        //    trip-level headsign in the commute-config picker.
+        val rawStopSequences = mutableMapOf<String, MutableList<Triple<Int, String, String>>>()
         openGtfsCsv(extractDir.resolve("stop_times.txt")).use { parser ->
             parser.forEach { r ->
                 val tripId = r.get("trip_id")
                 if (tripId in neededTripIds) {
                     val seq = r.get("stop_sequence")?.toIntOrNull() ?: return@forEach
                     val stopId = r.get("stop_id")
-                    rawStopSequences.getOrPut(tripId) { mutableListOf() }.add(seq to stopId)
+                    val stopHeadsign = r.get("stop_headsign").orEmpty()
+                    rawStopSequences.getOrPut(tripId) { mutableListOf() }
+                        .add(Triple(seq, stopId, stopHeadsign))
                 }
             }
         }
-        val stopSequencesByTrip: Map<String, List<String>> = rawStopSequences.mapValues { (_, list) ->
-            list.sortedBy { it.first }.map { it.second }
-        }
+        // Sort by sequence and keep (stopId, stopHeadsign) pairs in order.
+        val stopSequencesByTrip: Map<String, List<Pair<String, String>>> =
+            rawStopSequences.mapValues { (_, list) ->
+                list.sortedBy { it.first }.map { it.second to it.third }
+            }
         logger.lifecycle("Loaded stop sequences for ${stopSequencesByTrip.size} trips")
 
         // 6) Build the export model
@@ -326,15 +342,22 @@ tasks.register("extractGtfs") {
         val lines = byRouteId.mapNotNull { (routeId, trips) ->
             val route = routesById[routeId] ?: return@mapNotNull null
             val directions = trips.mapNotNull { trip ->
-                val stopIds = stopSequencesByTrip[trip.tripId] ?: return@mapNotNull null
-                val stops = stopIds.mapNotNull { stopsById[it] }
+                val stopSeq = stopSequencesByTrip[trip.tripId] ?: return@mapNotNull null
                 val polyline = trip.shapeId?.let { shapesById[it] }.orEmpty()
                 val tripIds = allTripIdsByKey[trip.routeId to trip.directionId].orEmpty().toList()
-                // BUG-005 fix: SL's GTFS leaves trip_headsign blank on many trips
-                // (notably bus 3 going either direction). Fall back to the final
-                // stop's name, which is the most natural direction label and
-                // matches what SL Transport API returns as the "direction" string.
-                val headsign = trip.headsign.ifBlank { stops.lastOrNull()?.name.orEmpty() }
+                // BUG-005 fix: SL's GTFS leaves trip_headsign blank on many trips.
+                // Fall back to the final stop's name as the direction label.
+                val finalStopName = stopSeq.lastOrNull()?.let { stopsById[it.first]?.name }.orEmpty()
+                val headsign = trip.headsign.ifBlank { finalStopName }
+                // BUG-025: build per-stop entries that carry stopHeadsign when it
+                // differs from the trip-level headsign. Most stops inherit the
+                // trip headsign and leave stopHeadsign null (asset stays compact
+                // because Gson omits null fields by default).
+                val stops = stopSeq.mapNotNull { (stopId, stopHeadsign) ->
+                    val base = stopsById[stopId] ?: return@mapNotNull null
+                    val override = stopHeadsign.takeIf { it.isNotBlank() && it != headsign }
+                    if (override != null) base.copy(stopHeadsign = override) else base
+                }
                 DirectionExport(
                     directionId = trip.directionId,
                     headsign = headsign,

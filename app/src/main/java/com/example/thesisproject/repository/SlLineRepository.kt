@@ -243,7 +243,11 @@ class SlLineRepository(private val context: Context) {
             cachedStopLineIndex?.let { return@withContext it }
             val gson = Gson()
             val lineByDesignation = mutableMapOf<String, Line>()
-            val optionByLineDirection = mutableMapOf<Pair<String, Int>, StopLineOption>()
+            // BUG-025: pool by (designation, directionId, displayHeadsign) so
+            // stops with different per-stop headsigns on the same direction
+            // get distinct StopLineOption instances. Pool size grows from
+            // ~1500 to a few thousand at most — still tiny.
+            val optionByLineDirSign = mutableMapOf<Triple<String, Int, String>, StopLineOption>()
             val index = mutableMapOf<String, MutableList<StopLineOption>>()
             context.applicationContext.assets.open(ASSET_NAME).use { stream ->
                 JsonReader(InputStreamReader(stream, StandardCharsets.UTF_8)).use { reader ->
@@ -265,19 +269,26 @@ class SlLineRepository(private val context: Context) {
                                         )
                                     }
                                     entry.directions.forEach { dir ->
-                                        val key = designation to dir.directionId
-                                        val opt = optionByLineDirection.getOrPut(key) {
-                                            StopLineOption(
-                                                line = line,
-                                                direction = dir.headsign,
-                                                directionCode = dir.directionId + 1
-                                            )
-                                        }
                                         dir.stops.forEach { stop ->
-                                            if (stop.name.isNotBlank()) {
-                                                val nameKey = stop.name.trim().lowercase()
-                                                index.getOrPut(nameKey) { mutableListOf() }.add(opt)
+                                            if (stop.name.isBlank()) return@forEach
+                                            // BUG-025: prefer the per-stop
+                                            // destination sign (what SL
+                                            // displays on the bus at THIS
+                                            // stop) when it's set; fall back
+                                            // to the trip-level headsign.
+                                            val displayHeadsign = stop.stopHeadsign
+                                                ?.takeIf { it.isNotBlank() }
+                                                ?: dir.headsign
+                                            val key = Triple(designation, dir.directionId, displayHeadsign)
+                                            val opt = optionByLineDirSign.getOrPut(key) {
+                                                StopLineOption(
+                                                    line = line,
+                                                    direction = displayHeadsign,
+                                                    directionCode = dir.directionId + 1
+                                                )
                                             }
+                                            val nameKey = stop.name.trim().lowercase()
+                                            index.getOrPut(nameKey) { mutableListOf() }.add(opt)
                                         }
                                     }
                                 }
@@ -289,11 +300,14 @@ class SlLineRepository(private val context: Context) {
                     reader.endObject()
                 }
             }
-            // Deduplicate per-stop entries (same line/direction may appear
-            // multiple times when GTFS has multiple platforms with the same
-            // name) and freeze.
+            // Deduplicate per-stop entries. Two options collapse only when
+            // they share line + directionCode + direction string — so a stop
+            // that sees both "Sofia" and "Tengdahlsgatan" on the same line+dir
+            // (rare; would happen only if the same stop name appears at two
+            // points in the same trip with different stop_headsigns) keeps
+            // both rows.
             val frozen: Map<String, List<StopLineOption>> = index.mapValues { (_, list) ->
-                list.distinctBy { it.line.id to it.directionCode }
+                list.distinctBy { Triple(it.line.id, it.directionCode, it.direction) }
             }
             cachedStopLineIndex = frozen
             frozen

@@ -666,32 +666,76 @@ class MainActivity : AppCompatActivity() {
                 return@launch
             }
 
+            // BUG-008: dedupe by (lineDesignation, directionId). When two
+            // commutes share the same route the polyline + route-stop markers
+            // would otherwise stack at alpha 180 and look muddled, hiding
+            // the visual change of saving a new commute. We render the
+            // shared polyline and route stops once (first config's color
+            // wins), and EVERY config still gets a distinctive user-stop
+            // highlight in its own palette color so multi-commute setups
+            // remain visibly distinct.
+            val drawnRouteKeys = mutableSetOf<Pair<String, Int>>()
+            val pointsByKey = mutableMapOf<Pair<String, Int>, List<GeoPoint>>()
+
             configs.forEachIndexed { index, config ->
                 val color = COMMUTE_PALETTE[index % COMMUTE_PALETTE.size]
                 val pair = lineRepository.matchConfig(matched, config) ?: return@forEachIndexed
-                val (_, direction) = pair
+                val (entry, direction) = pair
+                val routeKey = entry.lineDesignation to direction.directionId
 
-                if (direction.polyline.isNotEmpty()) {
-                    val points = direction.polyline.map { GeoPoint(it[0], it[1]) }
-                    commutePolylines[index] = points
-                    val polyline = Polyline()
-                    polyline.setPoints(points)
-                    polyline.outlinePaint.color = color
-                    polyline.outlinePaint.strokeWidth = 12f
-                    polyline.outlinePaint.alpha = 180
-                    map.overlays.add(polyline)
-                    commuteOverlays.add(polyline)
+                if (drawnRouteKeys.add(routeKey)) {
+                    if (direction.polyline.isNotEmpty()) {
+                        val points = direction.polyline.map { GeoPoint(it[0], it[1]) }
+                        pointsByKey[routeKey] = points
+                        commutePolylines[index] = points
+                        val polyline = Polyline()
+                        polyline.setPoints(points)
+                        polyline.outlinePaint.color = color
+                        polyline.outlinePaint.strokeWidth = 12f
+                        polyline.outlinePaint.alpha = 180
+                        map.overlays.add(polyline)
+                        commuteOverlays.add(polyline)
+                    }
+
+                    val dotIcon = makeStopDot(color)
+                    direction.stops.forEach { stop ->
+                        val marker = Marker(map)
+                        marker.position = GeoPoint(stop.lat, stop.lon)
+                        marker.title = "${config.lineDesignation ?: "?"}: ${stop.name}"
+                        marker.icon = dotIcon
+                        marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                        map.overlays.add(marker)
+                        commuteOverlays.add(marker)
+                    }
+                } else {
+                    // Polyline already drawn for an earlier config sharing
+                    // this route; reuse its points so the auto-fit camera
+                    // can still bound to this commute.
+                    pointsByKey[routeKey]?.let { commutePolylines[index] = it }
                 }
 
-                val dotIcon = makeStopDot(color)
-                direction.stops.forEach { stop ->
-                    val marker = Marker(map)
-                    marker.position = GeoPoint(stop.lat, stop.lon)
-                    marker.title = "${config.lineDesignation ?: "?"}: ${stop.name}"
-                    marker.icon = dotIcon
-                    marker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
-                    map.overlays.add(marker)
-                    commuteOverlays.add(marker)
+                // Per-config user-stop highlight — 18dp filled dot in the
+                // config's palette colour, drawn on top of any route-stop
+                // marker at the same position. Each saved commute thus has
+                // a visibly distinct anchor point on the map regardless of
+                // whether its route is shared with another commute.
+                val userStop = direction.stops.firstOrNull { it.id == config.stopId }
+                if (userStop != null) {
+                    val highlight = Marker(map)
+                    highlight.position = GeoPoint(userStop.lat, userStop.lon)
+                    highlight.title = buildString {
+                        append("My commute: ")
+                        append(config.lineDesignation ?: "?")
+                        append(" → ")
+                        append(config.direction)
+                        append(" (from ")
+                        append(userStop.name)
+                        append(")")
+                    }
+                    highlight.icon = makeStopDot(color, sizeDp = 18f)
+                    highlight.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
+                    map.overlays.add(highlight)
+                    commuteOverlays.add(highlight)
                 }
             }
             map.invalidate()

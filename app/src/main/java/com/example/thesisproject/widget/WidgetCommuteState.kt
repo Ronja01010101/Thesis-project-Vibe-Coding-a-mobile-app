@@ -111,7 +111,20 @@ data class WidgetCommuteState(
      * already shown via [scheduledClockTime] / [estimatedClockTime] +
      * [etaMinutes].
      */
-    val nextDepartureClockTimes: List<String> = emptyList()
+    val nextDepartureClockTimes: List<String> = emptyList(),
+    /**
+     * BUG-030: epoch-ms of the last successful service poll (carried from
+     * `TrackingState.Polling.lastUpdateMs`). Drives the widget's "Updated
+     * MM:SS ago" Chronometer. Same semantic as the in-app `live_status`
+     * banner so the two surfaces agree on what "updated" means. null when
+     * no successful poll has happened yet (cold start).
+     *
+     * Replaces [vehicleTimestampMs] as the Chronometer's base — that field
+     * was tied to SL's GPS-report time which lags the actual feed by
+     * 30-90s (per BUG-012), making the widget timer look broken to users
+     * comparing it to the app's live_status.
+     */
+    val lastUpdateMs: Long? = null
 )
 
 /** Compact summary of one or more SL deviations affecting the active line. */

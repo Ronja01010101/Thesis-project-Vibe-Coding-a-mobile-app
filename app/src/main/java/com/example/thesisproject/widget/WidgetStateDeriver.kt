@@ -183,7 +183,8 @@ object WidgetStateDeriver {
             estimatedClockTime = estimatedClock,
             vehicleTimestampMs = vehicleTimestampMs,
             additionalBusIndices = additionalBusIndices,
-            nextDepartureClockTimes = nextDepartureClockTimes
+            nextDepartureClockTimes = nextDepartureClockTimes,
+            lastUpdateMs = state.lastUpdateMs
         )
     }
 

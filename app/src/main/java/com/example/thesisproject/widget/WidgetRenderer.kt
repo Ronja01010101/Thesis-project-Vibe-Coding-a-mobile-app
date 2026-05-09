@@ -176,13 +176,17 @@ object WidgetRenderer {
             views.setViewVisibility(R.id.widget_next_departures, View.GONE)
         }
 
-        // --- 6. GPS-age caption — Chronometer auto-ticks "Updated MM:SS ago"
-        // every second inside the launcher's process. We only set the base
-        // when we have a real GPS timestamp from SL; otherwise the line is
-        // hidden. Chronometer.base is in elapsed-realtime-since-boot, not
-        // epoch ms, so we convert: base = elapsedRealtime - (now - tsEpoch).
-        val tsEpochMs = state.vehicleTimestampMs
-            ?.takeIf { state.phase != Phase.Dormant && state.phase != Phase.Passed }
+        // --- 6. Updated caption — Chronometer auto-ticks "Updated MM:SS ago"
+        // every second inside the launcher's process. BUG-030: base is the
+        // service's last successful poll time (state.lastUpdateMs), NOT the
+        // GPS-report time embedded in SL's feed. Two reasons: (a) SL's
+        // GPS-time lags 30-90s, making the widget look stuck on multi-
+        // minute values even on fresh polls, (b) the in-app live_status
+        // banner uses poll time, so widget + app now show comparable
+        // "updated Ns ago" semantics. Chronometer.base is in elapsed-
+        // realtime-since-boot, not epoch ms.
+        val tsEpochMs = state.lastUpdateMs
+            ?.takeIf { state.phase != Phase.Dormant }
         if (tsEpochMs != null) {
             val nowEpochMs = System.currentTimeMillis()
             val nowElapsed = SystemClock.elapsedRealtime()

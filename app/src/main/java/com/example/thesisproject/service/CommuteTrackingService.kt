@@ -16,6 +16,7 @@ import com.example.thesisproject.MainActivity
 import com.example.thesisproject.R
 import com.example.thesisproject.repository.CommuteConfigStore
 import com.example.thesisproject.repository.GtfsRealtimeRepository
+import com.example.thesisproject.repository.ServiceAlertsRepository
 import com.example.thesisproject.repository.SlDeviationsRepository
 import com.example.thesisproject.repository.SlLineRepository
 import com.example.thesisproject.repository.StopRepository
@@ -63,6 +64,7 @@ class CommuteTrackingService : Service() {
     private lateinit var lineRepository: SlLineRepository
     private lateinit var realtimeRepository: GtfsRealtimeRepository
     private lateinit var deviationsRepository: SlDeviationsRepository
+    private lateinit var serviceAlertsRepository: ServiceAlertsRepository
     private lateinit var stopRepository: StopRepository
     private lateinit var tracker: LivePositionTracker
 
@@ -72,12 +74,14 @@ class CommuteTrackingService : Service() {
         lineRepository = SlLineRepository(applicationContext)
         realtimeRepository = GtfsRealtimeRepository()
         deviationsRepository = SlDeviationsRepository()
+        serviceAlertsRepository = ServiceAlertsRepository()
         stopRepository = StopRepository()
         tracker = LivePositionTracker(
             configStore = configStore,
             lineRepository = lineRepository,
             realtimeRepository = realtimeRepository,
             deviationsRepository = deviationsRepository,
+            serviceAlertsRepository = serviceAlertsRepository,
             stopRepository = stopRepository,
             apiKey = BuildConfig.GTFS_REALTIME_KEY
         )

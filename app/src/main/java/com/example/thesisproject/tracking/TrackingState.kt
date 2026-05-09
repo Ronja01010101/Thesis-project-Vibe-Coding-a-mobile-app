@@ -4,6 +4,7 @@ import com.example.thesisproject.model.CommuteConfig
 import com.example.thesisproject.model.Departure
 import com.example.thesisproject.model.Deviation
 import com.example.thesisproject.model.SlDirection
+import com.example.thesisproject.model.TripAlert
 import com.example.thesisproject.model.VehiclePosition
 
 /**
@@ -50,7 +51,15 @@ sealed class TrackingState {
          * for high-frequency lines where multiple buses pass in the user's
          * window. Empty when SL has no upcoming departures.
          */
-        val upcomingDepartures: List<Departure> = emptyList()
+        val upcomingDepartures: List<Departure> = emptyList(),
+        /**
+         * GTFS-RT ServiceAlerts that match the active commute's tracked
+         * trip_ids — already filtered. These are "this affects YOUR
+         * specific bus" alerts, surfaced separately from line-level
+         * [deviations] (from the SL Deviations API). May be empty when
+         * SL has no trip-scoped alerts touching the tracked direction.
+         */
+        val tripAlerts: List<TripAlert> = emptyList()
     ) : TrackingState()
 
     /** A fetch failed or the active commute couldn't be matched to the catalog. */

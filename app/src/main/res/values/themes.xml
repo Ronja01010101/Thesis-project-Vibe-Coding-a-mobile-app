@@ -1,8 +1,11 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Base.Theme.ThesisProject" parent="Theme.Material3.DayNight.NoActionBar">
-        <!-- Customize your light theme here. -->
-        <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
+        <!-- BUG-026: SL-blue primary replaces the Material 3 purple default. -->
+        <item name="colorPrimary">@color/sl_blue</item>
+        <item name="colorOnPrimary">@color/white</item>
+        <item name="colorPrimaryContainer">@color/sl_blue_light</item>
+        <item name="colorOnPrimaryContainer">@color/sl_blue_dark</item>
     </style>
 
     <style name="Theme.ThesisProject" parent="Base.Theme.ThesisProject" />

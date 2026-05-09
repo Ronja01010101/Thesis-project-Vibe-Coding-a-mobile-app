@@ -2,4 +2,11 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+
+    <!-- BUG-026: SL-blue palette replacing the default Material 3 purple.
+         #1976D2 matches the widget line badge in widget_commute.xml and
+         the transit-domain feel users expect from an SL app. -->
+    <color name="sl_blue">#1976D2</color>
+    <color name="sl_blue_dark">#0D47A1</color>
+    <color name="sl_blue_light">#64B5F6</color>
 </resources>

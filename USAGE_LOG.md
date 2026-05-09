@@ -1635,4 +1635,48 @@
 
 ---
 
+### Entry 122
+- **Date:** 2026-05-09
+- **Prompt summary:** User runtime-tested BUG-031 with a screenshot showing the widget rendering "Avstängd hiss vid Kärrtorp (+4)" — a stop-elevator-closure deviation that's line-relevant but doesn't affect the user's tracked bus. User: "This is not super relevant, and not directly affecting us. ... maybe we change so that the 'general' deviations for the line, only shows in the app like it does now. And only deviations for the specific vehicle shows on the widget. how about that?"
+- **My response summary:** Adopted the clean split. `WidgetStateDeriver` now builds the deviation pill summary ONLY from `state.tripAlerts` — line-level deviations from the SL Deviations API are intentionally omitted from the widget surface. `computePhase` no longer flags `Phase.Deviation` for line-only alerts so the bus marker stays its OnTime/Late/Early colour for line-level noise (no "red bus marker for an elevator at a stop downstream"). App's deviation card unchanged — still shows trip alerts ★-prefixed at top + line deviations below in the same card. Single-line change in the deriver. BUGS.md BUG-031 entry extended with a "Refinement 2026-05-09" note that records the runtime-test feedback + the resulting widget-vs-app boundary rule. Branch `fix/widget-trip-alerts-only` merged to main and pushed.
+- **Agreement:** Clean split shipped; user runtime-tested again later.
+- **Plan revised after:** No PLAN/REQUIREMENTS changes. BUG-031 status unchanged ("Fixed (runtime confirmation pending)") with a refinement note appended.
+- **User feedback:** Citation above + screenshot.
+- **Satisfaction:** **Thesis-relevant: surface boundaries from lived use.** The original BUG-031 implementation merged trip alerts + line deviations on both surfaces (widget and app), with trip alerts sorted to top. That looked clean on paper. In practice the widget — which is meant to answer "is something wrong with MY bus" — was carrying line-level noise that belongs to a "what's happening on this line in general" surface (the app). The refined rule **widget = bus-specific, app = full picture** maps directly to the differing user intents at each surface. Worth flagging: **information architecture rules can hide until lived-use exposes the differing user intents at each surface.** The merge looked symmetric; the runtime test made the asymmetry visible.
+
+---
+
+### Entry 123
+- **Date:** 2026-05-09
+- **Prompt summary:** User: "when the vehicle is at 5 stops away, the marker doesnt show. it only shows on the widget when it arrives at the 4 stops away".
+- **My response summary:** Diagnosed: with `WINDOW_SIZE = 5`, the leftmost gauge dot represents "4 stops behind user" (since user's stop is the rightmost). A bus 5 stops away is one position before the leftmost — outside the visible window — so it shows as a "5 stops away" caption but no marker on the gauge. User wanted the marker visible at 5 stops. Surfaced two options (bump WINDOW_SIZE to 6, or rely on the off-gauge caption) and noted the 5/7 history (BUG-014 used 5; BUG-028 went to 7; runtime testing reverted to 5; this is a third iteration). Picked option 1: WINDOW_SIZE 5 → 6. Updated the comment to record the full iteration arc. Build clean, merged, pushed.
+- **Agreement:** Implicit (user authorised continued runtime-driven adjustments).
+- **Plan revised after:** No PLAN/REQUIREMENTS changes.
+- **User feedback:** "when the vehicle is at 5 stops away..."
+- **Satisfaction:** **Thesis-relevant: this is a 4-iteration tuning arc** (5 → 7 → 5 → 6) for a single design parameter, all driven by runtime testing. Each iteration was a one-line change and one merge. Worth flagging: **"window size" parameters are inherently empirical — there is no docs-driven correct value, only what the user finds readable on their actual device with their actual commute density.** The cost of getting it wrong is low (one branch + one merge per iteration), so iterate cheap and let the user converge. Unlike API integration questions where docs research preempts heuristic drift (BUG-009, BUG-031), parameter tuning questions need the opposite approach: ship-and-test, not document-and-design.
+
+---
+
+### Entry 124
+- **Date:** 2026-05-09
+- **Prompt summary:** Two requests in one prompt: (a) "i dont like it when it says 'leave now!' at the estimated arrival" — drop the LeaveNow special-case text. (b) "when you click the widget that is actively tracking a vehicle, it should zoom in to the actual vehicle on the map insted of the full route" — widget tap should focus the map on the tracked bus.
+- **My response summary:** Branch `fix/widget-tap-focus-and-leave-now` with both changes. **(a) Hero text:** removed the `Phase.LeaveNow -> "leave now!"` branch in `WidgetRenderer.render` — hero now shows "N min" regardless of phase. The Late-color bus marker still flags urgency at ETA ≤ 3 min (busColorFor maps LeaveNow → COLOR_LATE), so the visual signal is preserved without the disliked wording. **(b) Vehicle focus:** new `MainActivity.EXTRA_FOCUS_TRACKED_VEHICLE` constant; new public `WidgetStateDeriver.pickTrackedVehicle(polling, direction)` that wraps the existing private `pickLockedVehicle` so MainActivity uses the SAME lock-pattern picker as the widget surface (no "different bus shown by app vs widget" risk). `CommuteAppWidgetProvider.buildViewsFor` adds the extra to the openIntent ONLY when the widget is in active-tracked state (not Dormant); Dormant widget taps still launch the app normally without focus. MainActivity: `pendingVehicleFocus` flag, `readWidgetIntentExtras` helper called from both `onCreate` and `onNewIntent` (single-top re-entry); `maybeAutoFit` checks the flag before the route-fit branch — when set, picks the locked vehicle, animates map to its lat/lon at zoom 17 (street-level), sets `lastFittedCommuteKey` to suppress the subsequent route auto-fit. One-shot: flag clears after applying. If no vehicle yet at the moment of the tap, the flag stays set and applies on the next Polling tick. Build clean (one fix iteration: missing `import android.content.Intent`), merged, pushed.
+- **Agreement:** Implicit (continued runtime-driven adjustments).
+- **Plan revised after:** No PLAN/REQUIREMENTS changes. BUGS.md not updated (these are direct refinements rather than tracked bugs — could be retroactively logged but the user hasn't asked).
+- **User feedback:** Cited above.
+- **Satisfaction:** **Thesis-relevant: shared-helper reuse vs duplication.** The "pick the locked vehicle" logic existed inside `WidgetStateDeriver` as private. Two reasonable choices: (1) replicate the picker in MainActivity, (2) expose a public wrapper on the deriver. Picked (2) — single source of truth, guarantees app and widget agree on which vehicle to focus. Cost was 12 LOC (the wrapper) vs ~30 LOC if I'd duplicated. Worth flagging: **when two surfaces need to make the same domain decision, the right answer is "expose the existing logic", not "rederive it".** The non-programmer user wouldn't have caught a divergence ("why does the widget show vehicle A but the map zooms to vehicle B?") if it had emerged. Single-source-of-truth as a defensive design, not a performance optimisation. **Sub-observation: the build failed once on a missing `import android.content.Intent`** — minor, fixed in the next round. Mechanical Kotlin issue worth noting because adding `Intent` references in Kotlin requires the explicit import (no `java.lang.Intent` auto-import like for primitives). For thesis: the AI partner doesn't have Kotlin's import resolution in head; build verification is the catch-net. **Sub-observation: the user's Step 10 feedback velocity has been very high today** — runtime test → bug filed → fix → merge cycle averaging 1-2 prompts per change. Branch-per-bug discipline is keeping each change atomic; the cumulative result is a feature-complete-feeling Phase 1 widget.
+
+---
+
+### Entry 125
+- **Date:** 2026-05-09
+- **Prompt summary:** User: "i will consider this step done for now. can you go ahead and log everything? and i will run /cost". Step 10 (Polish) wrap-up signal.
+- **My response summary:** Appended Entries 122-125 to USAGE_LOG.md (per-prompt log of the post-Entry-121 turns). Awaiting `/cost` paste before adding **Checkpoint 9** to the Token Checkpoints section and flipping **Step 10 → Done** in REQUIREMENTS.md, per CLAUDE.md's "step transitions go: /cost → Checkpoint → Done".
+- **Agreement:** Step 10 closeout in progress; the cost snapshot is the load-bearing missing piece.
+- **Plan revised after:** Pending the /cost output.
+- **User feedback:** Cited above.
+- **Satisfaction:** **Thesis-relevant: today's Step 10 polish run is the largest single-day batch of bug fixes the project has had.** Cumulative bug count when the day started was 24 entries (BUG-001..024). Day's deliveries: BUG-025/026/027 fixed → BUG-028 design + implementation → BUG-029/030 (post-BUG-027 runtime regressions) → BUG-001/008/012/020 deferred-list closeout → BUG-006 closed without code → BUG-031 trip-level alerts (ServiceAlerts.pb integration) → 3 mid-session reverts (light-mode, WINDOW 7→5, BUG-027 auto-expand revert in BUG-029) → 4-iteration WINDOW tuning ending at 6 → drop "leave now!" + widget-tap-zoom. **Estimated 30+ commits across ~12 hours of session time.** The cost snapshot will reveal whether this density was sustainable or whether per-fix cost-per-minute compressed (as it has been across Phase 1) or inflated (as it might if late-day fatigue surfaced via more fix-iterations). Either way, this entry is the narrative bridge between Entry 121's BUG-031 ship and Checkpoint 9.
+
+---
+
 *New entries appended below as the project progresses.*

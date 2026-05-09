@@ -50,6 +50,7 @@ import com.example.thesisproject.tracking.TrackingState
 import com.example.thesisproject.ui.MapViewModel
 import com.example.thesisproject.ui.StopAdapter
 import com.example.thesisproject.ui.StopConfigBottomSheet
+import com.example.thesisproject.util.normalizeForSearch
 import com.example.thesisproject.widget.WidgetStateDeriver
 import com.google.android.material.card.MaterialCardView
 import kotlinx.coroutines.Job
@@ -563,8 +564,11 @@ class MainActivity : AppCompatActivity() {
             stopAdapter.submit(emptyList())
             return
         }
+        // BUG-001: normalise both query and stop name so "angerm" matches
+        // "Ångermanland" (and vice versa). Diacritic-stripped + lowercased.
+        val needle = normalizeForSearch(trimmed)
         val matches = allStops
-            .filter { it.name.contains(trimmed, ignoreCase = true) }
+            .filter { normalizeForSearch(it.name).contains(needle) }
             .take(20)
         stopAdapter.submit(matches)
         resultsCard.visibility = if (matches.isEmpty()) View.GONE else View.VISIBLE
